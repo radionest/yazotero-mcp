@@ -44,4 +44,8 @@ See `.env.example` for required environment variables.
 This project uses git worktrees for development:
 - `main` - stable release
 - `develop` - development branch
+<<<<<<< HEAD
 - Feature branches as needed
+=======
+- Feature branches as needed
+>>>>>>> ed7107b (Initial project setup with gitignore and README)

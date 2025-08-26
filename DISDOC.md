@@ -19,22 +19,38 @@ graph TB
         Tools[3 Core Tools<br/>• search_collection<br/>• analyze_fulltext<br/>• manage_notes]
         Resources[2 Resources<br/>• collections<br/>• tags]
     end
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     subgraph "Core Logic"
         Client[Zotero Client<br/>Local/Web]
         Analyzer[Text Analyzer]
         NoteManager[Note Manager]
     end
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     subgraph "Storage"
         Cache[Simple Cache<br/>In-Memory]
         Chunks[Response Chunker]
     end
+<<<<<<< HEAD
 
     Tools --> Client
     Tools --> Analyzer
     Tools --> NoteManager
 
+=======
+    
+    Tools --> Client
+    Tools --> Analyzer
+    Tools --> NoteManager
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     Client --> Cache
     Analyzer --> Chunks
     NoteManager --> Client
@@ -102,7 +118,11 @@ class ManageNotesRequest(BaseModel):
 class Author(BaseModel):
     first_name: str = ""
     last_name: str = ""
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     @property
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}".strip()
@@ -185,6 +205,7 @@ async def search_collection(
     Returns items with abstracts and metadata for assessment.
     """
     client = get_client()
+<<<<<<< HEAD
 
     # Get collection items
     items = await client.get_collection_items(request.collection_key)
@@ -193,15 +214,33 @@ async def search_collection(
     if request.query:
         items = filter_items(items, request.query)
 
+=======
+    
+    # Get collection items
+    items = await client.get_collection_items(request.collection_key)
+    
+    # Filter by query if provided
+    if request.query:
+        items = filter_items(items, request.query)
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     # Include full text if requested
     if request.include_fulltext:
         for item in items:
             item.fulltext = await client.get_fulltext(item.key)
+<<<<<<< HEAD
 
     # Chunk if needed
     if needs_chunking(items):
         return chunker.chunk_response(items)
 
+=======
+    
+    # Chunk if needed
+    if needs_chunking(items):
+        return chunker.chunk_response(items)
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     return SearchCollectionResponse(
         items=items,
         count=len(items)
@@ -216,11 +255,19 @@ async def analyze_fulltext(
     Analyze full text of an article for research evaluation.
     """
     client = get_client()
+<<<<<<< HEAD
 
     # Get item and full text
     item = await client.get_item(request.item_key)
     fulltext = await client.get_fulltext(request.item_key)
 
+=======
+    
+    # Get item and full text
+    item = await client.get_item(request.item_key)
+    fulltext = await client.get_fulltext(request.item_key)
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     if not fulltext:
         return AnalyzeFulltextResponse(
             item_key=request.item_key,
@@ -229,10 +276,17 @@ async def analyze_fulltext(
             result=[],
             error='No full text available'
         )
+<<<<<<< HEAD
 
     # Perform analysis
     analyzer = TextAnalyzer()
 
+=======
+    
+    # Perform analysis
+    analyzer = TextAnalyzer()
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     if request.analysis_type == AnalysisType.SUMMARY:
         result = analyzer.summarize(fulltext, item.abstract)
     elif request.analysis_type == AnalysisType.KEY_POINTS:
@@ -241,7 +295,11 @@ async def analyze_fulltext(
         result = analyzer.extract_methods(fulltext)
     else:
         result = analyzer.basic_analysis(fulltext)
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     return AnalyzeFulltextResponse(
         item_key=request.item_key,
         title=item.title,
@@ -259,13 +317,21 @@ async def manage_notes(
     """
     client = get_client()
     note_manager = NoteManager(client)
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     if request.action == NoteAction.CREATE:
         if not request.item_key or not request.content:
             return ManageNotesResponse(error='item_key and content required')
         note = await note_manager.create_note(request.item_key, request.content)
         return ManageNotesResponse(note=note)
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     elif request.action == NoteAction.READ:
         if request.note_key:
             note = await note_manager.get_note(request.note_key)
@@ -275,19 +341,31 @@ async def manage_notes(
             return ManageNotesResponse(notes=notes, count=len(notes))
         else:
             return ManageNotesResponse(error='note_key or item_key required')
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     elif request.action == NoteAction.UPDATE:
         if not request.note_key or not request.content:
             return ManageNotesResponse(error='note_key and content required')
         note = await note_manager.update_note(request.note_key, request.content)
         return ManageNotesResponse(note=note)
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     elif request.action == NoteAction.SEARCH:
         if not request.search_query:
             return ManageNotesResponse(error='search_query required')
         notes = await note_manager.search_notes(request.search_query)
         return ManageNotesResponse(notes=notes, count=len(notes))
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     return ManageNotesResponse(error='Invalid action')
 ```
 
@@ -301,7 +379,11 @@ from .models import ZoteroItem, Author
 
 class ZoteroClient:
     """Simplified client supporting both local and web access."""
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def __init__(self):
         if os.getenv('ZOTERO_LOCAL', 'false').lower() == 'true':
             self.mode = 'local'
@@ -309,37 +391,67 @@ class ZoteroClient:
         else:
             self.mode = 'web'
             self.client = self._init_web_client()
+<<<<<<< HEAD
 
         self.cache = {}  # Simple in-memory cache
 
+=======
+        
+        self.cache = {}  # Simple in-memory cache
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def _init_web_client(self):
         library_id = os.getenv('ZOTERO_LIBRARY_ID')
         api_key = os.getenv('ZOTERO_API_KEY')
         library_type = os.getenv('ZOTERO_LIBRARY_TYPE', 'user')
+<<<<<<< HEAD
 
         if not library_id or not api_key:
             raise ValueError("ZOTERO_LIBRARY_ID and ZOTERO_API_KEY required")
 
         return zotero.Zotero(library_id, library_type, api_key)
 
+=======
+        
+        if not library_id or not api_key:
+            raise ValueError("ZOTERO_LIBRARY_ID and ZOTERO_API_KEY required")
+        
+        return zotero.Zotero(library_id, library_type, api_key)
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def _init_local_client(self):
         # Use local Zotero SQLite database
         # Simplified implementation
         return LocalZoteroClient()
+<<<<<<< HEAD
 
     async def get_collection_items(
         self,
+=======
+    
+    async def get_collection_items(
+        self, 
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         collection_key: str,
         include_children: bool = True
     ) -> List[ZoteroItem]:
         """Get all items in a collection."""
         cache_key = f"collection:{collection_key}"
+<<<<<<< HEAD
 
         if cache_key in self.cache:
             return self.cache[cache_key]
 
         items = self.client.collection_items(collection_key)
 
+=======
+        
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        items = self.client.collection_items(collection_key)
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         # Include child collections if requested
         if include_children:
             child_collections = self.client.collections_sub(collection_key)
@@ -347,7 +459,11 @@ class ZoteroClient:
                 items.extend(
                     await self.get_collection_items(child['key'], False)
                 )
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         # Extract essential fields
         result = []
         for item in items:
@@ -360,6 +476,7 @@ class ZoteroClient:
                     year=item['data'].get('date', ''),
                     tags=[tag['tag'] for tag in item['data'].get('tags', [])]
                 ))
+<<<<<<< HEAD
 
         self.cache[cache_key] = result
         return result
@@ -374,6 +491,22 @@ class ZoteroClient:
         # Try to get PDF attachment
         attachments = self.client.children(item_key)
 
+=======
+        
+        self.cache[cache_key] = result
+        return result
+    
+    async def get_fulltext(self, item_key: str) -> Optional[str]:
+        """Get full text content if available."""
+        cache_key = f"fulltext:{item_key}"
+        
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        # Try to get PDF attachment
+        attachments = self.client.children(item_key)
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         for attachment in attachments:
             if attachment['data'].get('contentType') == 'application/pdf':
                 # In real implementation, extract text from PDF
@@ -381,9 +514,15 @@ class ZoteroClient:
                 content = f"[Full text extraction needed for {item_key}]"
                 self.cache[cache_key] = content
                 return content
+<<<<<<< HEAD
 
         return None
 
+=======
+        
+        return None
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def _extract_authors(self, data: dict) -> List[Author]:
         """Extract author names from item data."""
         authors = []
@@ -394,7 +533,11 @@ class ZoteroClient:
                     last_name=creator.get('lastName', '')
                 ))
         return authors
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     async def get_item(self, item_key: str) -> ZoteroItem:
         """Get single item by key."""
         item = self.client.item(item_key)
@@ -417,15 +560,23 @@ from .models import TextSummary, MethodsAnalysis
 
 class TextAnalyzer:
     """Simple text analysis for research evaluation."""
+<<<<<<< HEAD
 
     def summarize(
         self,
         fulltext: str,
+=======
+    
+    def summarize(
+        self, 
+        fulltext: str, 
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         abstract: Optional[str] = None
     ) -> TextSummary:
         """Create research summary."""
         # Extract sections
         sections = self._extract_sections(fulltext)
+<<<<<<< HEAD
 
         return TextSummary(
             abstract=abstract or self._extract_abstract(fulltext),
@@ -443,23 +594,54 @@ class TextAnalyzer:
             ),
             conclusion=self._summarize_section(
                 sections.get('conclusion', ''),
+=======
+        
+        return TextSummary(
+            abstract=abstract or self._extract_abstract(fulltext),
+            introduction=self._summarize_section(
+                sections.get('introduction', ''), 
+                max_sentences=3
+            ),
+            methods=self._summarize_section(
+                sections.get('methods', ''), 
+                max_sentences=3
+            ),
+            results=self._summarize_section(
+                sections.get('results', ''), 
+                max_sentences=3
+            ),
+            conclusion=self._summarize_section(
+                sections.get('conclusion', ''), 
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
                 max_sentences=3
             ),
             word_count=len(fulltext.split()),
             sections_found=list(sections.keys())
         )
+<<<<<<< HEAD
 
     def extract_key_points(self, fulltext: str) -> List[str]:
         """Extract key research points."""
         points = []
 
+=======
+    
+    def extract_key_points(self, fulltext: str) -> List[str]:
+        """Extract key research points."""
+        points = []
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         # Find sentences with key phrases
         key_phrases = [
             'we found', 'results show', 'demonstrated that',
             'significant', 'conclude that', 'importantly',
             'novel', 'first time', 'main contribution'
         ]
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         sentences = fulltext.split('.')
         for sentence in sentences:
             sentence_lower = sentence.lower()
@@ -467,25 +649,43 @@ class TextAnalyzer:
                 clean_sentence = sentence.strip()
                 if len(clean_sentence) > 20 and len(clean_sentence) < 300:
                     points.append(clean_sentence)
+<<<<<<< HEAD
 
         return points[:10]  # Return top 10 key points
 
+=======
+        
+        return points[:10]  # Return top 10 key points
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def extract_methods(self, fulltext: str) -> MethodsAnalysis:
         """Extract methodology information."""
         sections = self._extract_sections(fulltext)
         methods_text = sections.get('methods', '')
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         return MethodsAnalysis(
             study_type=self._detect_study_type(methods_text),
             sample_size=self._extract_sample_size(methods_text),
             statistical_methods=self._extract_statistics(methods_text),
             summary=self._summarize_section(methods_text, max_sentences=5)
         )
+<<<<<<< HEAD
 
     def _extract_sections(self, text: str) -> dict[str, str]:
         """Extract standard paper sections."""
         sections = {}
 
+=======
+    
+    def _extract_sections(self, text: str) -> dict[str, str]:
+        """Extract standard paper sections."""
+        sections = {}
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         # Common section headers
         section_patterns = {
             'introduction': r'(?i)\n(introduction|background)\s*\n',
@@ -494,7 +694,11 @@ class TextAnalyzer:
             'discussion': r'(?i)\n(discussion)\s*\n',
             'conclusion': r'(?i)\n(conclusions?|summary)\s*\n'
         }
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         for section, pattern in section_patterns.items():
             match = re.search(pattern, text)
             if match:
@@ -506,13 +710,20 @@ class TextAnalyzer:
                 )
                 end = start + next_section.start() if next_section else len(text)
                 sections[section] = text[start:end].strip()
+<<<<<<< HEAD
 
         return sections
 
+=======
+        
+        return sections
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def _summarize_section(self, text: str, max_sentences: int = 3) -> str:
         """Simple extractive summarization."""
         if not text:
             return ""
+<<<<<<< HEAD
 
         sentences = [s.strip() for s in text.split('.') if len(s.strip()) > 20]
         return '. '.join(sentences[:max_sentences]) + '.' if sentences else ""
@@ -521,6 +732,16 @@ class TextAnalyzer:
         """Detect type of study from methods."""
         text_lower = methods_text.lower()
 
+=======
+        
+        sentences = [s.strip() for s in text.split('.') if len(s.strip()) > 20]
+        return '. '.join(sentences[:max_sentences]) + '.' if sentences else ""
+    
+    def _detect_study_type(self, methods_text: str) -> str:
+        """Detect type of study from methods."""
+        text_lower = methods_text.lower()
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         if 'randomized' in text_lower and 'trial' in text_lower:
             return 'RCT'
         elif 'cohort' in text_lower:
@@ -535,7 +756,11 @@ class TextAnalyzer:
             return 'Meta-Analysis'
         else:
             return 'Unknown'
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def _extract_sample_size(self, text: str) -> Optional[str]:
         """Extract sample size from methods."""
         patterns = [
@@ -544,11 +769,16 @@ class TextAnalyzer:
             r'(\d+)\s+subjects?',
             r'(\d+)\s+patients?'
         ]
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 return match.group(1)
+<<<<<<< HEAD
 
         return None
 
@@ -556,17 +786,34 @@ class TextAnalyzer:
         """Extract statistical methods mentioned."""
         methods = []
 
+=======
+        
+        return None
+    
+    def _extract_statistics(self, text: str) -> List[str]:
+        """Extract statistical methods mentioned."""
+        methods = []
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         statistical_terms = [
             't-test', 'ANOVA', 'regression', 'chi-square',
             'Mann-Whitney', 'Wilcoxon', 'Kruskal-Wallis',
             'correlation', 'logistic regression', 'Cox regression'
         ]
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         text_lower = text.lower()
         for term in statistical_terms:
             if term.lower() in text_lower:
                 methods.append(term)
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         return methods
 ```
 
@@ -580,6 +827,7 @@ from .models import Note
 
 class NoteManager:
     """Simple note management for annotations."""
+<<<<<<< HEAD
 
     def __init__(self, client: ZoteroClient):
         self.client = client
@@ -587,6 +835,15 @@ class NoteManager:
     async def create_note(
         self,
         item_key: str,
+=======
+    
+    def __init__(self, client: ZoteroClient):
+        self.client = client
+    
+    async def create_note(
+        self, 
+        item_key: str, 
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         content: str,
         tags: Optional[List[str]] = None
     ) -> Note:
@@ -597,9 +854,15 @@ class NoteManager:
             'note': self._format_note_html(content),
             'tags': [{'tag': tag} for tag in (tags or [])]
         }
+<<<<<<< HEAD
 
         created_note = self.client.client.create_items([note_data])[0]
 
+=======
+        
+        created_note = self.client.client.create_items([note_data])[0]
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         return Note(
             key=created_note['key'],
             parent_key=item_key,
@@ -608,11 +871,19 @@ class NoteManager:
             modified=datetime.now(),
             tags=tags or []
         )
+<<<<<<< HEAD
 
     async def get_notes_for_item(self, item_key: str) -> List[Note]:
         """Get all notes for a specific item."""
         children = self.client.client.children(item_key)
 
+=======
+    
+    async def get_notes_for_item(self, item_key: str) -> List[Note]:
+        """Get all notes for a specific item."""
+        children = self.client.client.children(item_key)
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         notes = []
         for child in children:
             if child['data']['itemType'] == 'note':
@@ -624,9 +895,15 @@ class NoteManager:
                     modified=datetime.fromisoformat(child['data'].get('dateModified', '')),
                     tags=[tag['tag'] for tag in child['data'].get('tags', [])]
                 ))
+<<<<<<< HEAD
 
         return notes
 
+=======
+        
+        return notes
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     async def get_note(self, note_key: str) -> Note:
         """Get single note by key."""
         note = self.client.client.item(note_key)
@@ -638,14 +915,24 @@ class NoteManager:
             modified=datetime.fromisoformat(note['data'].get('dateModified', '')),
             tags=[tag['tag'] for tag in note['data'].get('tags', [])]
         )
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     async def update_note(self, note_key: str, content: str) -> Note:
         """Update existing note content."""
         note = self.client.client.item(note_key)
         note['data']['note'] = self._format_note_html(content)
+<<<<<<< HEAD
 
         self.client.client.update_item(note)
 
+=======
+        
+        self.client.client.update_item(note)
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         return Note(
             key=note_key,
             parent_key=note['data'].get('parentItem'),
@@ -654,21 +941,35 @@ class NoteManager:
             modified=datetime.now(),
             tags=[tag['tag'] for tag in note['data'].get('tags', [])]
         )
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     async def search_notes(self, query: str) -> List[Note]:
         """Search through all notes."""
         # Simple search implementation
         all_items = self.client.client.items()
         notes = []
+<<<<<<< HEAD
 
         query_lower = query.lower()
 
+=======
+        
+        query_lower = query.lower()
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         for item in all_items:
             if item['data']['itemType'] == 'note':
                 note_text = self._extract_note_text(
                     item['data'].get('note', '')
                 )
+<<<<<<< HEAD
 
+=======
+                
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
                 if query_lower in note_text.lower():
                     notes.append(Note(
                         key=item['key'],
@@ -678,9 +979,15 @@ class NoteManager:
                         modified=datetime.fromisoformat(item['data'].get('dateModified', '')),
                         tags=[tag['tag'] for tag in item['data'].get('tags', [])]
                     ))
+<<<<<<< HEAD
 
         return notes
 
+=======
+        
+        return notes
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def _format_note_html(self, text: str) -> str:
         """Format plain text as HTML note."""
         # Escape HTML and convert newlines
@@ -688,7 +995,11 @@ class NoteManager:
         text = text.replace('\n\n', '</p><p>')
         text = text.replace('\n', '<br>')
         return f'<p>{text}</p>'
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def _extract_note_text(self, html_content: str) -> str:
         """Extract plain text from HTML note."""
         # Simple HTML stripping
@@ -707,17 +1018,26 @@ from .models import ZoteroItem, ChunkResponse
 
 class ResponseChunker:
     """Simple response chunking for large results."""
+<<<<<<< HEAD
 
     def __init__(self, max_tokens: int = 20000):
         self.max_tokens = max_tokens
         self.chunks_store = {}  # In-memory storage
 
+=======
+    
+    def __init__(self, max_tokens: int = 20000):
+        self.max_tokens = max_tokens
+        self.chunks_store = {}  # In-memory storage
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def estimate_tokens(self, data: Any) -> int:
         """Simple token estimation (4 chars = 1 token)."""
         if isinstance(data, str):
             return len(data) // 4
         else:
             return len(json.dumps(data)) // 4
+<<<<<<< HEAD
 
     def chunk_response(self, data: List[ZoteroItem]) -> ChunkResponse:
         """Chunk list of items if too large."""
@@ -738,6 +1058,28 @@ class ResponseChunker:
         if len(chunks) == 1:
             return ChunkResponse(items=chunks[0], has_more=False)
 
+=======
+    
+    def chunk_response(self, data: List[ZoteroItem]) -> ChunkResponse:
+        """Chunk list of items if too large."""
+        total_tokens = self.estimate_tokens(data)
+        
+        if total_tokens <= self.max_tokens:
+            return ChunkResponse(items=data, has_more=False)
+        
+        # Calculate items per chunk
+        items_per_chunk = max(1, len(data) * self.max_tokens // total_tokens)
+        
+        # Create chunks
+        chunks = [
+            data[i:i + items_per_chunk] 
+            for i in range(0, len(data), items_per_chunk)
+        ]
+        
+        if len(chunks) == 1:
+            return ChunkResponse(items=chunks[0], has_more=False)
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         # Store remaining chunks
         chunk_id = str(uuid.uuid4())
         self.chunks_store[chunk_id] = {
@@ -745,14 +1087,22 @@ class ResponseChunker:
             'current': 1,
             'total': len(chunks)
         }
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         return ChunkResponse(
             items=chunks[0],
             has_more=True,
             chunk_id=chunk_id,
             chunk_info=f'1/{len(chunks)}'
         )
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     def get_next_chunk(self, chunk_id: str) -> ChunkResponse:
         """Get next chunk by ID."""
         if chunk_id not in self.chunks_store:
@@ -761,6 +1111,7 @@ class ResponseChunker:
                 has_more=False,
                 error='Invalid or expired chunk ID'
             )
+<<<<<<< HEAD
 
         store = self.chunks_store[chunk_id]
 
@@ -776,6 +1127,23 @@ class ResponseChunker:
         if not has_more:
             del self.chunks_store[chunk_id]
 
+=======
+        
+        store = self.chunks_store[chunk_id]
+        
+        if not store['chunks']:
+            del self.chunks_store[chunk_id]
+            return ChunkResponse(items=[], has_more=False)
+        
+        next_chunk = store['chunks'].pop(0)
+        store['current'] += 1
+        
+        has_more = len(store['chunks']) > 0
+        
+        if not has_more:
+            del self.chunks_store[chunk_id]
+        
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
         return ChunkResponse(
             items=next_chunk,
             has_more=has_more,
@@ -793,29 +1161,49 @@ from typing import Optional
 
 class Settings(BaseSettings):
     """Configuration with Pydantic validation."""
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     # Zotero settings
     zotero_local: bool = Field(False, env='ZOTERO_LOCAL')
     zotero_library_id: str = Field('', env='ZOTERO_LIBRARY_ID')
     zotero_api_key: Optional[str] = Field(None, env='ZOTERO_API_KEY')
     zotero_library_type: str = Field('user', env='ZOTERO_LIBRARY_TYPE')
+<<<<<<< HEAD
 
     # Performance settings
     max_chunk_size: int = Field(20000, env='MAX_CHUNK_SIZE')
     cache_ttl: int = Field(300, env='CACHE_TTL')
 
+=======
+    
+    # Performance settings
+    max_chunk_size: int = Field(20000, env='MAX_CHUNK_SIZE')
+    cache_ttl: int = Field(300, env='CACHE_TTL')
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     @validator('zotero_library_id')
     def validate_library_id(cls, v, values):
         if not values.get('zotero_local') and not v:
             raise ValueError('ZOTERO_LIBRARY_ID required for web mode')
         return v
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     @validator('zotero_api_key')
     def validate_api_key(cls, v, values):
         if not values.get('zotero_local') and not v:
             raise ValueError('ZOTERO_API_KEY required for web mode')
         return v
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
     class Config:
         env_file = '.env'
         case_sensitive = False

@@ -60,9 +60,17 @@ logs/
 .cache/
 *.cache
 
+<<<<<<< HEAD
 # Worktrees
+=======
+# Worktrees  
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
 /worktrees/
 
 # MCP specific
 *.mcp.log
+<<<<<<< HEAD
 mcp-debug/
+=======
+mcp-debug/
+>>>>>>> ed7107b (Initial project setup with gitignore and README)
