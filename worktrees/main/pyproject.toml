@@ -55,6 +55,14 @@ warn_unused_ignores = true
 warn_no_return = true
 follow_imports = "normal"
 
+[[tool.mypy.overrides]]
+module = "pydantic"
+ignore_missing_imports = false
+
+[[tool.mypy.overrides]]
+module = "pydantic.*"
+ignore_missing_imports = false
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
