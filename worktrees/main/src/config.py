@@ -1,11 +1,14 @@
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from typing import Self
+
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseModel):
-    """Configuration with Pydantic validation."""
+class Settings(BaseSettings):
+    """Configuration with Pydantic validation and automatic .env loading."""
 
     # Zotero settings
-    zotero_local: bool = Field(default=False)
+    zotero_local: bool = Field(default=True)
     zotero_library_id: str = Field(default="")
     zotero_api_key: str | None = Field(default=None)
     zotero_library_type: str = Field(default="user")
@@ -14,23 +17,28 @@ class Settings(BaseModel):
     max_chunk_size: int = Field(default=20000)
     cache_ttl: int = Field(default=300)
 
-    @field_validator("zotero_library_id")
-    @classmethod
-    def validate_library_id(cls, v: str, info: ValidationInfo) -> str:
-        values = info.data if hasattr(info, "data") else {}
-        if not values.get("zotero_local") and not v:
-            raise ValueError("ZOTERO_LIBRARY_ID required for web mode")
-        return v
+    @model_validator(mode="after")
+    def validate_credentials(self) -> Self:
+        """Validate credentials based on mode."""
+        if not self.zotero_local:
+            # Web mode requires both library_id and api_key
+            if not self.zotero_library_id:
+                raise ValueError("ZOTERO_LIBRARY_ID required for web mode")
+            if not self.zotero_api_key:
+                raise ValueError("ZOTERO_API_KEY required for web mode")
+        else:
+            # Local mode: set default library_id if not provided
+            # (pyzotero requires it even for local mode, but value doesn't matter)
+            if not self.zotero_library_id:
+                self.zotero_library_id = "1"
+        return self
 
-    @field_validator("zotero_api_key")
-    @classmethod
-    def validate_api_key(cls, v: str | None, info: ValidationInfo) -> str | None:
-        values = info.data if hasattr(info, "data") else {}
-        if not values.get("zotero_local") and not v:
-            raise ValueError("ZOTERO_API_KEY required for web mode")
-        return v
-
-    model_config = ConfigDict()
+    model_config = SettingsConfigDict(
+        env_file=(".env", ".env.test"),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
 
 # Singleton
