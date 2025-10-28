@@ -14,6 +14,7 @@ from .models import (
     ZoteroItem,
     ZoteroWriteResponse,
 )
+from .protocols import webonly
 
 
 class ItemsIterator:
@@ -287,11 +288,13 @@ class ZoteroClient:
         raw_item: dict[str, Any] = self._client.item(item_key)
         return raw_item
 
+    @webonly
     async def delete_item(self, item: ZoteroItem) -> None:
         """Delete item using ZoteroItem model."""
         # Convert to dict for pyzotero API (needs key + version)
         self._client.delete_item(item.model_dump(mode="json"))
 
+    @webonly
     async def delete_item_by_key(self, item_key: str) -> None:
         """Delete item by key string.
 
@@ -302,6 +305,7 @@ class ZoteroClient:
         raw_item = self._client.item(item_key)
         self._client.delete_item(raw_item)
 
+    @webonly
     async def delete_collection_by_key(self, collection_key: str) -> None:
         """Delete collection by key.
 
@@ -312,6 +316,7 @@ class ZoteroClient:
         raw_coll = self._client.collection(collection_key)
         self._client.delete_collection(raw_coll)
 
+    @webonly
     async def create_items(self, items: list[ItemCreate]) -> list[ZoteroItem]:
         """Create new items in Zotero library.
 
@@ -359,6 +364,7 @@ class ZoteroClient:
             for child in children_data
         ]
 
+    @webonly
     async def update_item(self, item_key: str, update: ItemUpdate) -> None:
         """Update an existing item.
 
@@ -395,6 +401,7 @@ class ZoteroClient:
         template: dict[str, Any] = self._client.item_template(template_type)
         return template
 
+    @webonly
     async def create_collections(self, collections: list[CollectionCreate]) -> list[Collection]:
         """Create new collections.
 
@@ -427,6 +434,7 @@ class ZoteroClient:
         ]
         return [Collection(self._client, coll.model_dump(mode="json")) for coll in validated_colls]
 
+    @webonly
     async def add_to_collection(self, collection_key: str, items: list[ZoteroItem]) -> None:
         """Add items to a collection.
 

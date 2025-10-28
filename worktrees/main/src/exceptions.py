@@ -93,3 +93,28 @@ class ConfigurationError(ZoteroError):
     """
 
     pass
+
+
+class WebOnlyOperationError(ZoteroError):
+    """Raised when attempting a web-only operation with a local client.
+
+    The local Zotero API (http://localhost:23119/api) is read-only and
+    does not support write operations. This error is raised when trying
+    to perform create, update, or delete operations using a local client.
+
+    Args:
+        operation: Name of the operation attempted (e.g., 'create_items', 'update_item')
+
+    Examples:
+        >>> raise WebOnlyOperationError("create_items")
+        >>> raise WebOnlyOperationError("delete_collection")
+    """
+
+    def __init__(self, operation: str):
+        message = (
+            f"Operation '{operation}' requires web API access. "
+            "The local Zotero API is read-only. "
+            "Please configure ZOTERO_API_KEY and set ZOTERO_LOCAL=false to use web API."
+        )
+        super().__init__(message)
+        self.operation = operation

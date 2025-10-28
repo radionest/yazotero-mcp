@@ -3,6 +3,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .chunker import ResponseChunker, TextChunker
+from .client_router import client_router
 from .models import (
     FulltextResponse,
     Note,
@@ -10,12 +11,12 @@ from .models import (
     ZoteroItem,
 )
 from .note_manager import NoteManager
-from .zotero_client import zotero_client
 
 # Initialize components
 _chunker: ResponseChunker = ResponseChunker()
 _text_chunker: TextChunker = TextChunker()
-_note_manager = NoteManager(zotero_client)
+# Use router's default client for note manager (prefers local for reads)
+_note_manager = NoteManager(client_router.default_client)
 
 
 # Create FastMCP server with error masking for security
@@ -45,8 +46,9 @@ async def get_collection_items(collection_key: str, ctx: Context) -> SearchColle
     - The 'current_chunk' and 'total_chunks' fields show progress (e.g., current_chunk=1, total_chunks=3)
     - The 'message' field provides specific instructions for retrieving next chunk
     """
-    # Get collection items
-    collection = await zotero_client.get_collection(key=collection_key)
+    # Use read client for collection retrieval (prefers local)
+    client = client_router.read_client
+    collection = await client.get_collection(key=collection_key)
     filtered_items = collection.items.all()
     await ctx.debug("\n".join([str(i) for i in filtered_items]))
 
@@ -161,17 +163,20 @@ async def search_articles(
         # Multiple tags create AND logic in Zotero API
         search_params["tag"] = tags
 
+    # Use read client for search (prefers local)
+    client = client_router.read_client
+
     # Execute search
     if collection_key:
         # Search within specific collection
-        collection = await zotero_client.get_collection(key=collection_key)
+        collection = await client.get_collection(key=collection_key)
         # Get items using iterator and apply filters
         all_items = collection.items.all()
         filtered_items = all_items
     else:
         # Search across entire library
         # Use pyzotero's items() method with search parameters
-        raw_items = zotero_client._client.items(**search_params)
+        raw_items = client._client.items(**search_params)
         filtered_items = [ZoteroItem.model_validate(item) for item in raw_items]
 
     # Manual tag filtering if needed (pyzotero may not support all tag logic)
@@ -258,8 +263,9 @@ async def get_item_fulltext(item_key: str) -> FulltextResponse:
         if result.has_more:
             next_part = get_next_fulltext_chunk(result.chunk_id)
     """
-    # Get fulltext from Zotero
-    fulltext = await zotero_client.get_fulltext(item_key)
+    # Use read client for fulltext (prefers local, supports fulltext since Jan 2025)
+    client = client_router.read_client
+    fulltext = await client.get_fulltext(item_key)
 
     if not fulltext:
         return FulltextResponse(
@@ -346,7 +352,9 @@ async def get_next_fulltext_chunk(chunk_id: str) -> FulltextResponse:
 @mcp.resource("resource://collections")
 async def list_collections() -> str:
     """List available Zotero collections."""
-    collections = zotero_client.collections
+    # Use read client for listing collections (prefers local)
+    client = client_router.read_client
+    collections = client.collections
 
     if not collections:
         return "No collections found in library"
