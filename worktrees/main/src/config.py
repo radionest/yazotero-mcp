@@ -3,6 +3,8 @@ from typing import Self
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .exceptions import ConfigurationError
+
 
 class Settings(BaseSettings):
     """Configuration with Pydantic validation and automatic .env loading."""
@@ -23,9 +25,9 @@ class Settings(BaseSettings):
         if not self.zotero_local:
             # Web mode requires both library_id and api_key
             if not self.zotero_library_id:
-                raise ValueError("ZOTERO_LIBRARY_ID required for web mode")
+                raise ConfigurationError("ZOTERO_LIBRARY_ID required for web mode")
             if not self.zotero_api_key:
-                raise ValueError("ZOTERO_API_KEY required for web mode")
+                raise ConfigurationError("ZOTERO_API_KEY required for web mode")
         else:
             # Local mode: set default library_id if not provided
             # (pyzotero requires it even for local mode, but value doesn't matter)

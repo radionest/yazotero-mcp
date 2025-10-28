@@ -1,8 +1,11 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, computed_field
+
+if TYPE_CHECKING:
+    pass
 
 
 class ZoteroTag(BaseModel):
@@ -223,25 +226,6 @@ class CollectionCreate(BaseModel):
 
 
 # Zotero API Write Response Models
-
-
-class ZoteroWriteError(Exception):
-    """Exception raised when Zotero write operations fail."""
-
-    def __init__(self, operation: str, failures: dict[str, "ZoteroFailedItem"]):
-        """Initialize error with operation type and failure details.
-
-        Args:
-            operation: Type of operation (e.g., "create_items", "create_collections")
-            failures: Dict of failed items/collections indexed by position
-        """
-        self.operation = operation
-        self.failures = failures
-        failed_details = [
-            f"Index {idx}: {fail.message} (code {fail.code})" for idx, fail in failures.items()
-        ]
-        message = f"Failed to {operation}: {'; '.join(failed_details)}"
-        super().__init__(message)
 
 
 class ZoteroFailedItem(BaseModel):

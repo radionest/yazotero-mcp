@@ -4,14 +4,22 @@ import uuid
 from typing import Any
 
 from .config import settings
+from .exceptions import ZoteroNotFoundError
 from .models import ChunkResponse, ZoteroItem
 
 
 class ResponseChunker:
     """Simple response chunking for large results."""
 
+    # Safety margin for response metadata (message, count, chunk_id, etc.)
+    # MCP limit is 25000 tokens, we use 18000 for items to leave room for metadata
+    METADATA_OVERHEAD = 2000
+    MCP_TOKEN_LIMIT = 25000
+
     def __init__(self, max_tokens: int | None = None):
         self.max_tokens = max_tokens or settings.max_chunk_size
+        # Apply safety margin to account for response metadata
+        self.effective_max_tokens = self.max_tokens - self.METADATA_OVERHEAD
         self.chunks_store: dict[str, dict[str, Any]] = {}  # In-memory storage
 
     def estimate_tokens(self, data: Any) -> int:
@@ -21,20 +29,45 @@ class ResponseChunker:
         else:
             return len(json.dumps(data, default=str)) // 4
 
+    def estimate_response_tokens(
+        self, items: list[ZoteroItem], include_metadata: bool = True
+    ) -> int:
+        """Estimate tokens for complete response including metadata.
+
+        Args:
+            items: List of items to estimate
+            include_metadata: Whether to include overhead for response metadata
+
+        Returns:
+            Estimated token count for complete response
+        """
+        items_tokens = self.estimate_tokens([item.model_dump() for item in items])
+
+        if include_metadata:
+            # Add overhead for SearchCollectionResponse metadata:
+            # count, has_more, chunk_id, current_chunk, total_chunks, message
+            return items_tokens + self.METADATA_OVERHEAD
+
+        return items_tokens
+
     def needs_chunking(self, data: list[ZoteroItem]) -> bool:
-        """Check if data needs chunking."""
+        """Check if data needs chunking.
+
+        Uses effective_max_tokens (with safety margin) to ensure complete
+        response stays under MCP_TOKEN_LIMIT.
+        """
         total_tokens = self.estimate_tokens([item.model_dump() for item in data])
-        return total_tokens > self.max_tokens
+        return total_tokens > self.effective_max_tokens
 
     def chunk_response(self, data: list[ZoteroItem]) -> ChunkResponse:
         """Chunk list of items if too large."""
         total_tokens = self.estimate_tokens([item.model_dump() for item in data])
 
-        if total_tokens <= self.max_tokens:
+        if total_tokens <= self.effective_max_tokens:
             return ChunkResponse(items=data, has_more=False)
 
-        # Calculate items per chunk
-        items_per_chunk = max(1, len(data) * self.max_tokens // total_tokens)
+        # Calculate items per chunk using effective max tokens
+        items_per_chunk = max(1, len(data) * self.effective_max_tokens // total_tokens)
 
         # Create chunks
         chunks = [data[i : i + items_per_chunk] for i in range(0, len(data), items_per_chunk)]
@@ -55,9 +88,13 @@ class ResponseChunker:
         )
 
     def get_next_chunk(self, chunk_id: str) -> ChunkResponse:
-        """Get next chunk by ID."""
+        """Get next chunk by ID.
+
+        Raises:
+            ZoteroNotFoundError: If chunk_id is invalid or expired
+        """
         if chunk_id not in self.chunks_store:
-            return ChunkResponse(items=[], has_more=False, error="Invalid or expired chunk ID")
+            raise ZoteroNotFoundError("chunk", chunk_id)
 
         store = self.chunks_store[chunk_id]
 
@@ -209,17 +246,13 @@ class TextChunker:
         }
 
     def get_next_text_chunk(self, chunk_id: str) -> dict[str, Any]:
-        """Get next text chunk by ID."""
+        """Get next text chunk by ID.
+
+        Raises:
+            ZoteroNotFoundError: If chunk_id is invalid or expired
+        """
         if chunk_id not in self.text_store:
-            return {
-                "item_key": "",
-                "content": "",
-                "has_more": False,
-                "chunk_id": None,
-                "current_chunk": None,
-                "total_chunks": None,
-                "error": "Invalid or expired chunk ID",
-            }
+            raise ZoteroNotFoundError("text chunk", chunk_id)
 
         store = self.text_store[chunk_id]
 

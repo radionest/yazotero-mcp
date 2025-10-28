@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from .chunker import ResponseChunker, TextChunker
 from .models import (
@@ -18,12 +18,13 @@ _text_chunker: TextChunker = TextChunker()
 _note_manager = NoteManager(zotero_client)
 
 
-# Create FastMCP server
-mcp: FastMCP = FastMCP("zotero-mcp")
+# Create FastMCP server with error masking for security
+# Custom exceptions (ToolError subclasses) will still show details to clients
+mcp: FastMCP = FastMCP("zotero-mcp", mask_error_details=True)
 
 
 @mcp.tool
-async def get_collection_items(collection_key: str) -> SearchCollectionResponse:
+async def get_collection_items(collection_key: str, ctx: Context) -> SearchCollectionResponse:
     """
     Search and evaluate items in a specific collection.
     Returns items with abstracts and metadata for assessment.
@@ -47,6 +48,7 @@ async def get_collection_items(collection_key: str) -> SearchCollectionResponse:
     # Get collection items
     collection = await zotero_client.get_collection(key=collection_key)
     filtered_items = collection.items.all()
+    await ctx.debug("\n".join([str(i) for i in filtered_items]))
 
     # Chunk if needed
     if _chunker.needs_chunking(filtered_items):
@@ -75,11 +77,11 @@ async def get_next_chunk(chunk_id: str) -> SearchCollectionResponse:
     Use this tool when 'search_collection' returns 'has_more=True'.
     Pass the 'chunk_id' from the previous response to retrieve the next batch of items.
     Continue calling until 'has_more=False' to get all results.
+
+    Raises:
+        ZoteroNotFoundError: If chunk_id is invalid or expired
     """
     chunk_response = _chunker.get_next_chunk(chunk_id)
-
-    if chunk_response.error:
-        return SearchCollectionResponse(items=[], count=0, error=chunk_response.error)
 
     message = None
     if chunk_response.has_more:
@@ -311,19 +313,14 @@ async def get_next_fulltext_chunk(chunk_id: str) -> FulltextResponse:
     Returns:
         FulltextResponse with next chunk of text
 
+    Raises:
+        ZoteroNotFoundError: If chunk_id is invalid or expired
+
     Example:
         # After getting initial fulltext with has_more=True
         next_chunk = get_next_fulltext_chunk(chunk_id="uuid-here")
     """
     chunk_data = _text_chunker.get_next_text_chunk(chunk_id)
-
-    if chunk_data.get("error"):
-        return FulltextResponse(
-            item_key="",
-            content="",
-            has_more=False,
-            error=chunk_data["error"],
-        )
 
     message = None
     if chunk_data["has_more"]:
@@ -367,6 +364,68 @@ async def list_tags() -> str:
     # This would require additional Zotero API calls
     # For now, return placeholder
     return "Tags resource not yet implemented"
+
+
+@mcp.prompt()
+def zotero_usage_guide() -> str:
+    """
+    Guide for using Zotero MCP server effectively.
+
+    This prompt provides instructions for AI models on how to properly use
+    this MCP server's tools and handle chunked responses.
+    """
+    return """# Zotero MCP Server Usage Guide
+
+## Overview
+This server provides access to Zotero library for searching articles, managing notes, and retrieving fulltext content.
+
+## Important: Chunked Responses
+Many tools return chunked data when responses are large. Always check for chunking:
+
+### Response Chunking (for search results)
+- If `has_more=True` in response, call `get_next_chunk(chunk_id)`
+- Continue until `has_more=False`
+- Check `current_chunk` and `total_chunks` for progress
+
+### Fulltext Chunking (for article text)
+- If `has_more=True` in fulltext response, call `get_next_fulltext_chunk(chunk_id)`
+- Continue until `has_more=False`
+- Text is split intelligently by paragraphs/sentences
+
+## Workflow Examples
+
+### 1. Search and Read Articles
+```
+1. Use search_articles() or get_collection_items()
+2. If has_more=True, call get_next_chunk() until complete
+3. For specific item, call get_item_fulltext(item_key)
+4. If fulltext has_more=True, call get_next_fulltext_chunk() until complete
+```
+
+### 2. Create Notes
+```
+1. Find item using search_articles()
+2. Call create_note_for_item(item_key, title, content, tags)
+```
+
+## Available Tools
+- **search_articles**: Search by query, tags, collection, or item type
+- **get_collection_items**: Get all items from specific collection
+- **get_item_fulltext**: Retrieve full text (with automatic chunking)
+- **create_note_for_item**: Create notes attached to items
+- **get_next_chunk**: Get next batch of search results
+- **get_next_fulltext_chunk**: Get next part of fulltext
+
+## Available Resources
+- **resource://collections**: List all available collections
+- **resource://tags**: List tags (not yet implemented)
+
+## Best Practices
+1. Always handle chunked responses completely before proceeding
+2. Use tags for filtering and organization
+3. Check error fields in responses
+4. Use get_item_fulltext separately instead of including in search
+"""
 
 
 if __name__ == "__main__":

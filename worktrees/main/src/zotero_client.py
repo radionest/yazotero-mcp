@@ -4,6 +4,7 @@ from typing import Any, overload
 from pyzotero import zotero
 
 from . import config
+from .exceptions import ConfigurationError, ZoteroWriteError
 from .models import (
     Attachment,
     CollectionCreate,
@@ -11,7 +12,6 @@ from .models import (
     ItemUpdate,
     ZoteroCollectionResponse,
     ZoteroItem,
-    ZoteroWriteError,
     ZoteroWriteResponse,
 )
 
@@ -153,7 +153,7 @@ class ZoteroClient:
         library_type = self.settings.zotero_library_type
 
         if not library_id or not api_key:
-            raise ValueError("ZOTERO_LIBRARY_ID and ZOTERO_API_KEY required")
+            raise ConfigurationError("ZOTERO_LIBRARY_ID and ZOTERO_API_KEY required")
 
         return zotero.Zotero(library_id, library_type, api_key, local=False)
 
@@ -249,16 +249,24 @@ class ZoteroClient:
                 return cached_value
             return None
 
-        # Try to get PDF attachment
-        attachments = self._client.children(item_key)
+        try:
+            # Use pyzotero's fulltext_item() method
+            fulltext_data = self._client.fulltext_item(item_key)
 
-        for attachment in attachments:
-            if attachment["data"].get("contentType") == "application/pdf":
-                # In real implementation, extract text from PDF
-                # For now, return placeholder
-                content = f"[Full text extraction needed for {item_key}]"
+            # Extract content from response
+            content = fulltext_data.get("content")
+
+            if content:
                 self.cache[cache_key] = content
-                return content
+                return str(content)
+
+        except Exception:
+            # Item may not have fulltext available
+            # Cache the failure to avoid repeated API calls
+            self.cache[cache_key] = None
+            # Don't raise here - return None to indicate no content available
+            # Callers should check for None and raise ContentNotAvailableError if needed
+            pass
 
         return None
 
