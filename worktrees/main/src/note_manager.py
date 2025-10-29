@@ -1,8 +1,10 @@
+import json
 from datetime import datetime
 from typing import Any
 
 from .formatters import (
     extract_note_text,
+    format_dict_to_html,
     format_note_html,
     parse_datetime,
 )
@@ -21,7 +23,18 @@ class NoteManager:
     ) -> Note:
         """Create a new note for an item."""
         # Convert dict to string if needed
-        content_str = content if isinstance(content, str) else str(content)
+        match content:
+            case dict():
+                content_str = format_dict_to_html(content)
+            case str():
+                # Try to parse as JSON and convert to dict
+                try:
+                    content_dict = json.loads(content)
+                    content_str = format_dict_to_html(content_dict)
+                except (json.JSONDecodeError, ValueError):
+                    content_str = content
+            case _:
+                content_str = str(content)
 
         note_item = ItemCreate(
             item_type="note",

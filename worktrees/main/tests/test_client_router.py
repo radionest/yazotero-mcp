@@ -12,7 +12,7 @@ class TestWebOnlyDecorator:
     """Test the @webonly decorator functionality."""
 
     @pytest.mark.asyncio
-    async def test_webonly_blocks_local_mode(self):
+    async def test_webonly_blocks_local_mode(self) -> None:
         """Test that @webonly raises error for local mode clients."""
 
         class MockClient:
@@ -31,7 +31,7 @@ class TestWebOnlyDecorator:
         assert "web API access" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_webonly_allows_web_mode(self):
+    async def test_webonly_allows_web_mode(self) -> None:
         """Test that @webonly allows web mode clients."""
 
         class MockClient:

@@ -35,7 +35,7 @@ def local_settings() -> Settings:
     """Settings for local Zotero mode."""
     return Settings(
         zotero_local=True,
-        zotero_library_id="",
+        zotero_library_id="0",
         zotero_api_key=None,
         zotero_library_type="user",
     )

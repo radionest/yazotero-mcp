@@ -16,7 +16,7 @@ from .note_manager import NoteManager
 _chunker: ResponseChunker = ResponseChunker()
 _text_chunker: TextChunker = TextChunker()
 # Use router's default client for note manager (prefers local for reads)
-_note_manager = NoteManager(client_router.default_client)
+_note_manager = NoteManager(client_router.write_client)
 
 
 # Create FastMCP server with error masking for security
@@ -234,6 +234,34 @@ async def create_note_for_item(
 
 
 @mcp.tool
+async def get_item_notes(item_key: str) -> list[Note]:
+    """
+    Get all notes for a specific Zotero item/article.
+
+    Retrieves all notes attached to the specified item, including their content,
+    timestamps, and tags.
+
+    Args:
+        item_key: The Zotero item key to retrieve notes from
+
+    Returns:
+        List of Note objects with key, content, timestamps, and tags
+
+    Note:
+        This endpoint uses the web API as local Zotero API does not yet support
+        retrieving notes. Make sure web API credentials are configured.
+
+    Example:
+        # Get all notes for an article
+        notes = get_item_notes("ABC123XYZ")
+        for note in notes:
+            print(f"{note.key}: {note.content[:100]}")
+    """
+    notes = await _note_manager.get_notes_for_item(item_key=item_key)
+    return notes
+
+
+@mcp.tool
 async def get_item_fulltext(item_key: str) -> FulltextResponse:
     """
     Get full text content for a Zotero item (e.g., from PDF attachment).
@@ -241,6 +269,10 @@ async def get_item_fulltext(item_key: str) -> FulltextResponse:
     Returns the text content with automatic chunking if the text is too large
     to fit in a single response. Use this endpoint instead of include_fulltext
     parameter in other endpoints.
+
+    This tool uses a two-tier approach for maximum reliability:
+    1. First tries Zotero's pre-indexed fulltext API (fast)
+    2. If unavailable, automatically downloads and parses PDF directly (fallback)
 
     Args:
         item_key: The Zotero item key to get fulltext for
@@ -265,7 +297,13 @@ async def get_item_fulltext(item_key: str) -> FulltextResponse:
     """
     # Use read client for fulltext (prefers local, supports fulltext since Jan 2025)
     client = client_router.read_client
+
+    # Try Zotero's pre-indexed fulltext API first (fast)
     fulltext = await client.get_fulltext(item_key)
+
+    # If unavailable, fallback to direct PDF parsing
+    if not fulltext:
+        fulltext = await client.get_pdf_text(item_key)
 
     if not fulltext:
         return FulltextResponse(

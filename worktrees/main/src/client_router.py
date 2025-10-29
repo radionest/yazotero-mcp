@@ -38,7 +38,7 @@ class ZoteroClientRouter:
             try:
                 local_settings = config.Settings(
                     zotero_local=True,
-                    zotero_library_id=self.settings.zotero_library_id or "1",
+                    zotero_library_id=self.settings.zotero_library_id or "0",
                     zotero_library_type=self.settings.zotero_library_type,
                 )
                 self._local_client = ZoteroClient(settings=local_settings)

@@ -165,7 +165,7 @@ class ZoteroClient:
         Endpoint: http://localhost:23119/api
         Note: Only read operations are supported in local mode.
         """
-        library_id = self.settings.zotero_library_id or "1"  # Dummy ID for local mode
+        library_id = self.settings.zotero_library_id or "0"  # Dummy ID for local mode
         library_type = self.settings.zotero_library_type
 
         return zotero.Zotero(library_id, library_type, local=True)
@@ -241,7 +241,19 @@ class ZoteroClient:
         return None
 
     async def get_fulltext(self, item_key: str) -> str | None:
-        """Get full text content if available."""
+        """Get full text content from PDF attachment of an item.
+
+        Args:
+            item_key: Parent item key (article/book)
+
+        Returns:
+            Full text content from PDF attachment, or None if not available
+
+        Note:
+            This method finds PDF attachments among child items and retrieves
+            their fulltext content. The item_key should be the parent item (article),
+            not the attachment itself.
+        """
         cache_key = f"fulltext:{item_key}"
 
         if cache_key in self.cache:
@@ -251,8 +263,23 @@ class ZoteroClient:
             return None
 
         try:
-            # Use pyzotero's fulltext_item() method
-            fulltext_data = self._client.fulltext_item(item_key)
+            # Get child attachments for this item
+            children = await self.get_children(item_key)
+
+            # Find first PDF attachment
+            pdf_attachment = None
+            for child in children:
+                if child.content_type == "application/pdf":
+                    pdf_attachment = child
+                    break
+
+            if not pdf_attachment:
+                # No PDF attachment found - cache failure
+                self.cache[cache_key] = None
+                return None
+
+            # Get fulltext from PDF attachment using its key
+            fulltext_data = self._client.fulltext_item(pdf_attachment.key)
 
             # Extract content from response
             content = fulltext_data.get("content")
@@ -267,6 +294,83 @@ class ZoteroClient:
             self.cache[cache_key] = None
             # Don't raise here - return None to indicate no content available
             # Callers should check for None and raise ContentNotAvailableError if needed
+            pass
+
+        return None
+
+    async def get_pdf_text(self, item_key: str) -> str | None:
+        """Get text content by downloading and parsing PDF file directly.
+
+        This method downloads the PDF file and extracts text using PyPDF2.
+        Unlike get_fulltext(), which uses Zotero's indexed fulltext API,
+        this method provides direct control over PDF parsing.
+
+        Args:
+            item_key: Parent item key (article/book)
+
+        Returns:
+            Extracted text content from PDF, or None if not available
+
+        Note:
+            Use get_fulltext() when possible as it's faster (uses pre-indexed text).
+            Use this method when:
+            - Zotero hasn't indexed the PDF yet
+            - You need full control over text extraction
+            - The fulltext API is unavailable
+        """
+        cache_key = f"pdf_text:{item_key}"
+
+        if cache_key in self.cache:
+            cached_value = self.cache[cache_key]
+            if isinstance(cached_value, str):
+                return cached_value
+            return None
+
+        try:
+            # Get child attachments for this item
+            children = await self.get_children(item_key)
+
+            # Find first PDF attachment
+            pdf_attachment = None
+            for child in children:
+                if child.content_type == "application/pdf":
+                    pdf_attachment = child
+                    break
+
+            if not pdf_attachment:
+                # No PDF attachment found - cache failure
+                self.cache[cache_key] = None
+                return None
+
+            # Download PDF file content
+            pdf_bytes = self._client.file(pdf_attachment.key)
+
+            # Parse PDF using PyPDF2
+            import io
+
+            from PyPDF2 import PdfReader
+
+            pdf_file = io.BytesIO(pdf_bytes)
+            reader = PdfReader(pdf_file)
+
+            # Extract text from all pages
+            text_parts = []
+            for page in reader.pages:
+                text = page.extract_text()
+                if text:
+                    text_parts.append(text)
+
+            # Combine all pages
+            full_text = "\n\n".join(text_parts)
+
+            if full_text:
+                self.cache[cache_key] = full_text
+                return full_text
+
+        except Exception:
+            # PDF download or parsing failed - cache failure
+            self.cache[cache_key] = None
+            # Don't raise here - return None to indicate no content available
             pass
 
         return None
@@ -292,7 +396,7 @@ class ZoteroClient:
     async def delete_item(self, item: ZoteroItem) -> None:
         """Delete item using ZoteroItem model."""
         # Convert to dict for pyzotero API (needs key + version)
-        self._client.delete_item(item.model_dump(mode="json"))
+        self._client.delete_item(item.model_dump(mode="json", by_alias=True))
 
     @webonly
     async def delete_item_by_key(self, item_key: str) -> None:
@@ -329,7 +433,7 @@ class ZoteroClient:
         Raises:
             ZoteroWriteError: If any items failed to create
         """
-        items_data = [item.model_dump(exclude_none=True) for item in items]
+        items_data = [item.model_dump(exclude_none=True, by_alias=True) for item in items]
         raw_response = self._client.create_items(items_data)
 
         # Validate response structure
@@ -373,7 +477,7 @@ class ZoteroClient:
             update: Update data
         """
         item_dict = self._client.item(item_key)
-        update_data = update.model_dump(exclude_none=True)
+        update_data = update.model_dump(exclude_none=True, by_alias=True)
 
         # Merge update data into item
         for key, value in update_data.items():
@@ -443,7 +547,7 @@ class ZoteroClient:
             item_keys: List of items keys to add
         """
         for item in items:
-            self._client.addto_collection(collection_key, item.model_dump())
+            self._client.addto_collection(collection_key, item.model_dump(by_alias=True))
 
     async def get_collection_items_list(self, collection_key: str) -> list[dict[str, Any]]:
         """Get all items in a collection as list.
