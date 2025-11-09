@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .formatters import (
     extract_note_text,
@@ -9,13 +9,20 @@ from .formatters import (
     parse_datetime,
 )
 from .models import ItemCreate, ItemUpdate, Note, ZoteroTag
-from .zotero_client import ZoteroClient
+
+if TYPE_CHECKING:
+    from .protocols import ZoteroClientProtocol
 
 
 class NoteManager:
     """Simple note management for annotations."""
 
-    def __init__(self, client: ZoteroClient):
+    def __init__(self, client: "ZoteroClientProtocol"):
+        """Initialize NoteManager with a client implementing ZoteroClientProtocol.
+
+        Args:
+            client: Any client implementing ZoteroClientProtocol (ZoteroClient or ZoteroClientRouter)
+        """
         self.client = client
 
     async def create_note(

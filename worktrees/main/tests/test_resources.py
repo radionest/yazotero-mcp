@@ -3,7 +3,6 @@
 import pytest
 from fastmcp import Client
 
-import src.zotero_client
 from src.mcp_server import mcp
 from src.zotero_client import ZoteroClient
 from tests.test_helpers import ZoteroTestDataManager
@@ -16,10 +15,9 @@ class TestCollectionsResource:
     async def test_list_collections_basic(
         self,
         test_data_manager: ZoteroTestDataManager,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that list_collections returns created collections."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         # Create test collections
         collection_keys = await test_data_manager.create_test_collections(
@@ -42,13 +40,12 @@ class TestCollectionsResource:
     @pytest.mark.asyncio
     async def test_list_collections_empty(
         self,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test list_collections when no collections exist."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         # Clear collections cache to ensure fresh read
-        real_zotero_client._collections = None
+        test_zotero_client._collections = None
 
         async with Client(mcp) as client:
             result = await client.read_resource("resource://collections")
@@ -63,10 +60,9 @@ class TestCollectionsResource:
     async def test_list_collections_format(
         self,
         test_data_manager: ZoteroTestDataManager,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that collection output format is correct."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         # Create one collection with known name
         collection_keys = await test_data_manager.create_test_collections(
@@ -87,10 +83,9 @@ class TestCollectionsResource:
     async def test_list_collections_multiple(
         self,
         test_data_manager: ZoteroTestDataManager,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test listing multiple collections."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         # Create multiple collections with different names
         names = ["Alpha Collection", "Beta Collection", "Gamma Collection"]

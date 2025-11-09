@@ -118,3 +118,81 @@ class WebOnlyOperationError(ZoteroError):
         )
         super().__init__(message)
         self.operation = operation
+
+
+class CrossReffError(ToolError):
+    """Base exception for CrossRef API operations."""
+
+    pass
+
+
+class InvalidDOIError(CrossReffError):
+    """Raised when DOI format is invalid.
+
+    Args:
+        doi: Invalid DOI identifier
+        reason: Optional reason for invalidity
+
+    Examples:
+        >>> raise InvalidDOIError("123", "DOI must start with '10.'")
+    """
+
+    def __init__(self, doi: str, reason: str = "Invalid DOI format") -> None:
+        message = f"{reason}: {doi}"
+        super().__init__(message)
+        self.doi = doi
+        self.reason = reason
+
+
+class DOINotFoundError(CrossReffError):
+    """Raised when DOI is not found in CrossRef.
+
+    Args:
+        doi: DOI identifier that was not found
+
+    Examples:
+        >>> raise DOINotFoundError("10.1234/example")
+    """
+
+    def __init__(self, doi: str) -> None:
+        message = f"DOI not found in Crossref: {doi}"
+        super().__init__(message)
+        self.doi = doi
+
+
+class CrossRefAPIError(CrossReffError):
+    """Raised when CrossRef API returns an error (non-404 HTTP errors).
+
+    Args:
+        doi: DOI being queried
+        status_code: HTTP status code
+        detail: Optional error details
+
+    Examples:
+        >>> raise CrossRefAPIError("10.1234/example", 500)
+    """
+
+    def __init__(self, doi: str, status_code: int, detail: str = "") -> None:
+        message = f"Crossref API error for DOI {doi}: {status_code}"
+        if detail:
+            message += f" - {detail}"
+        super().__init__(message)
+        self.doi = doi
+        self.status_code = status_code
+        self.detail = detail
+
+
+class CrossRefConnectionError(CrossReffError):
+    """Raised when connection to CrossRef API fails.
+
+    Args:
+        detail: Error details
+
+    Examples:
+        >>> raise CrossRefConnectionError("Connection timeout")
+    """
+
+    def __init__(self, detail: str) -> None:
+        message = f"Failed to connect to Crossref API: {detail}"
+        super().__init__(message)
+        self.detail = detail

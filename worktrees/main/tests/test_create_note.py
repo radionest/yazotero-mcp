@@ -5,7 +5,6 @@ import json
 import pytest
 from fastmcp import Client
 
-import src.zotero_client
 from src.mcp_server import mcp
 from src.zotero_client import ZoteroClient
 
@@ -17,7 +16,7 @@ class TestCreateNoteEndpoint:
     async def test_item_for_note(
         self,
         test_data_manager,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> str:
         """Create a test item to attach notes to."""
         items = await test_data_manager.create_test_items(
@@ -32,10 +31,9 @@ class TestCreateNoteEndpoint:
     async def test_create_note_with_plain_text(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test basic note creation with plain text content."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         title = "Test Note"
         content = "This is a test note with plain text content."
@@ -62,10 +60,9 @@ class TestCreateNoteEndpoint:
     async def test_create_note_with_dict_content(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test note creation with structured dictionary content (JSON-formatted)."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         title = "Structured Analysis"
         content_dict = {
@@ -100,10 +97,9 @@ class TestCreateNoteEndpoint:
     async def test_create_note_with_tags(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test note creation with tags properly attached."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         title = "Tagged Note"
         content = "Note with tags"
@@ -132,10 +128,9 @@ class TestCreateNoteEndpoint:
     async def test_create_note_without_tags(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test note creation without optional tags parameter."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         title = "Untagged Note"
         content = "Note without tags"
@@ -161,10 +156,9 @@ class TestCreateNoteEndpoint:
     async def test_note_title_in_content(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that title is prepended to content as markdown heading."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         title = "My Important Note"
         content = "Content of the note"
@@ -188,10 +182,9 @@ class TestCreateNoteEndpoint:
     async def test_dict_content_json_formatting(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that dictionary content is properly JSON-formatted with indentation."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         title = "Structured Note"
         content_dict = {
@@ -220,10 +213,9 @@ class TestCreateNoteEndpoint:
     async def test_created_note_structure(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that returned Note model has all required fields."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         async with Client(mcp) as client:
             result = await client.call_tool(
@@ -254,10 +246,9 @@ class TestCreateNoteEndpoint:
     async def test_note_parent_relationship(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that note is correctly linked to parent item."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         async with Client(mcp) as client:
             result = await client.call_tool(
@@ -274,7 +265,7 @@ class TestCreateNoteEndpoint:
         assert note.parent_key == test_item_for_note
 
         # Verify note appears as child of parent item
-        children = await real_zotero_client.get_children(test_item_for_note)
+        children = await test_zotero_client.get_children(test_item_for_note)
         note_keys = [child.key for child in children if child.item_type == "note"]
         assert note.key in note_keys
 
@@ -282,10 +273,9 @@ class TestCreateNoteEndpoint:
     async def test_note_has_valid_key(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that created note has a valid Zotero key."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         async with Client(mcp) as client:
             result = await client.call_tool(
@@ -309,10 +299,9 @@ class TestCreateNoteEndpoint:
     async def test_multiple_notes_for_same_item(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test creating multiple notes for the same item."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         note_count = 3
         created_keys = []
@@ -335,7 +324,7 @@ class TestCreateNoteEndpoint:
         assert len(set(created_keys)) == note_count  # All keys are unique
 
         # Verify all notes are children of the item
-        children = await real_zotero_client.get_children(test_item_for_note)
+        children = await test_zotero_client.get_children(test_item_for_note)
         child_note_keys = [child.key for child in children if child.item_type == "note"]
         for key in created_keys:
             assert key in child_note_keys
@@ -346,10 +335,9 @@ class TestCreateNoteEndpoint:
     async def test_create_note_empty_content(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test handling of empty content string."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         title = "Empty Content Note"
         content = ""
@@ -374,10 +362,9 @@ class TestCreateNoteEndpoint:
     async def test_create_note_empty_title(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test with empty title parameter."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         title = ""
         content = "Content without title"
@@ -404,10 +391,9 @@ class TestCreateNoteEndpoint:
     async def test_note_with_manual_tags(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test creating note with manual (type=1) tags."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         tags = ["manual-tag-1", "manual-tag-2"]
 
@@ -431,10 +417,9 @@ class TestCreateNoteEndpoint:
     async def test_note_tags_properly_stored(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that tags are persisted correctly in Zotero."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         tags = ["persistent-tag-1", "persistent-tag-2", "persistent-tag-3"]
 
@@ -451,7 +436,7 @@ class TestCreateNoteEndpoint:
             note = result.data
 
         # Retrieve the note from Zotero to verify persistence
-        raw_note = await real_zotero_client.get_raw_item(note.key)
+        raw_note = await test_zotero_client.get_raw_item(note.key)
         stored_tags = [tag["tag"] for tag in raw_note["data"].get("tags", [])]
 
         # Verify all tags are stored
@@ -462,10 +447,9 @@ class TestCreateNoteEndpoint:
     async def test_create_note_with_special_characters(
         self,
         test_item_for_note: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test note creation with special characters in content."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         title = "Special Characters Test"
         content = "Testing <HTML> & 'quotes' and \"double quotes\" with émojis 🎉"

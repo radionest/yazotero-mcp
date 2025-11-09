@@ -3,7 +3,6 @@
 import pytest
 from fastmcp import Client
 
-import src.zotero_client
 from src.mcp_server import mcp
 from src.models import ZoteroItem
 from src.zotero_client import ZoteroClient
@@ -16,10 +15,9 @@ class TestTagsE2E:
     async def test_get_items_with_tags_via_mcp(
         self,
         collection_key_items_with_tags: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test reading items with tags through get_collection_items MCP endpoint."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         # Get all items via MCP
         async with Client(mcp) as client:
@@ -53,10 +51,9 @@ class TestTagsE2E:
     async def test_search_by_single_tag_via_mcp(
         self,
         collection_key_items_with_tags: list[ZoteroItem],
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test filtering items by single tag through search_articles endpoint."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         # Item 0 has "manual-tag-1"
         search_tag = "manual-tag-1"
@@ -77,10 +74,9 @@ class TestTagsE2E:
     async def test_search_by_multiple_tags_via_mcp(
         self,
         collection_key_items_with_tags: list[ZoteroItem],
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test AND logic when filtering by multiple tags."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         # Item 2 has both "manual-mixed" and "auto-mixed"
         search_tags = ["manual-mixed", "auto-mixed"]
@@ -101,13 +97,12 @@ class TestTagsE2E:
     async def test_create_note_with_tags_via_mcp(
         self,
         collection_key_items_with_tags: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test creating note with tags through create_note_for_item endpoint."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         # Use first test item
-        collection = await real_zotero_client.get_collection(key=collection_key_items_with_tags)
+        collection = await test_zotero_client.get_collection(key=collection_key_items_with_tags)
         assert collection is not None
         item_key = collection.items.all()[0].key
         note_tags = ["test-note-tag", "automated"]
@@ -133,10 +128,9 @@ class TestTagsE2E:
     async def test_item_tags_property_consistency(
         self,
         collection_key_items_with_tags: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that tags property consistently returns string list."""
-        src.zotero_client.zotero_client = real_zotero_client
 
         async with Client(mcp) as client:
             result = await client.call_tool(

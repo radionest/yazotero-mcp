@@ -5,7 +5,6 @@ import json
 import pytest
 from fastmcp import Client
 
-import src.zotero_client
 from src.chunker import ResponseChunker
 from src.mcp_server import mcp
 from src.zotero_client import ZoteroClient
@@ -18,10 +17,9 @@ class TestSearchE2E:
     async def test_get_collection_items_basic(
         self,
         basic_collection_with_items: tuple[str, int],
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test basic collection search returns real items."""
-        src.zotero_client.zotero_client = real_zotero_client
         collection_key, expected_count = basic_collection_with_items
 
         request = {"collection_key": collection_key}
@@ -45,10 +43,9 @@ class TestSearchE2E:
     async def test_search_with_fulltext(
         self,
         collection_for_fulltext_test: str,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test including full text in search results."""
-        src.zotero_client.zotero_client = real_zotero_client
         collection_key = collection_for_fulltext_test
 
         async with Client(mcp) as client:
@@ -68,10 +65,9 @@ class TestSearchE2E:
         self,
         collection_for_chunking_test: str,
         chunker_with_small_size: int,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test response chunking for large results."""
-        src.zotero_client.zotero_client = real_zotero_client
         collection_key = collection_for_chunking_test
 
         async with Client(mcp) as client:
@@ -93,13 +89,12 @@ class TestSearchE2E:
     async def test_mcp_token_limit_compliance_get_collection_items(
         self,
         basic_collection_with_items: tuple[str, int],
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that get_collection_items responses stay under MCP 25000 token limit.
 
         This is a critical integration test for the chunker bug fix.
         """
-        src.zotero_client.zotero_client = real_zotero_client
         collection_key, _ = basic_collection_with_items
 
         request = {"collection_key": collection_key}
@@ -141,10 +136,9 @@ class TestSearchE2E:
     async def test_mcp_token_limit_compliance_search_articles(
         self,
         basic_collection_with_items: tuple[str, int],
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that search_articles responses stay under MCP 25000 token limit."""
-        src.zotero_client.zotero_client = real_zotero_client
         collection_key, _ = basic_collection_with_items
 
         request = {"collection_key": collection_key}
@@ -179,10 +173,9 @@ class TestSearchE2E:
         self,
         collection_for_chunking_test: str,
         chunker_with_small_size: int,
-        real_zotero_client: ZoteroClient,
+        test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that all chunks in a multi-chunk workflow stay under token limit."""
-        src.zotero_client.zotero_client = real_zotero_client
         collection_key = collection_for_chunking_test
 
         async with Client(mcp) as client:

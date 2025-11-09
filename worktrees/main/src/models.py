@@ -191,6 +191,7 @@ class ItemCreate(BaseModel):
     parent_item: str | None = Field(None, alias="parentItem")
     note: str | None = None
     tags: list[ZoteroTag] = Field(default_factory=list)
+    collections: list[str] = Field(default_factory=list)
     # Allow additional fields for different item types
     model_config = {"extra": "allow", "populate_by_name": True}
 

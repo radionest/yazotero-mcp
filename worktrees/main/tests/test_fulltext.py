@@ -169,7 +169,7 @@ class TestMCPFulltextEndpoint:
 
         # Replace the module-level router
         original_router = src.mcp_server.client_router
-        src.mcp_server.client_router = test_router
+        src.mcp_server._zotero_client = test_router
 
         yield test_router
 
@@ -269,7 +269,7 @@ class TestMCPFulltextEndpoint:
         setup_local_router: ZoteroClientRouter,
     ) -> None:
         """Test fulltext chunking workflow - get all chunks until completion."""
-        item_key = "DF33QFUC"
+        item_key = "CRLXZCLC"
 
         async with Client(mcp) as client:
             # Get first chunk

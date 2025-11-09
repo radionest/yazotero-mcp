@@ -2,21 +2,28 @@ from typing import Any
 
 from fastmcp import Context, FastMCP
 
+from src.exceptions import ZoteroNotFoundError
+from src.protocols import ZoteroClientProtocol
+
 from .chunker import ResponseChunker, TextChunker
 from .client_router import client_router
+from .crossref_client import crossref_client
 from .models import (
+    CollectionCreate,
     FulltextResponse,
     Note,
     SearchCollectionResponse,
     ZoteroItem,
 )
 from .note_manager import NoteManager
+from .zotero_client import Collection
 
 # Initialize components
 _chunker: ResponseChunker = ResponseChunker()
 _text_chunker: TextChunker = TextChunker()
-# Use router's default client for note manager (prefers local for reads)
-_note_manager = NoteManager(client_router.write_client)
+# Use router directly as client for note manager (implements ZoteroClientProtocol)
+_zotero_client: ZoteroClientProtocol = client_router
+_note_manager = NoteManager(_zotero_client)
 
 
 # Create FastMCP server with error masking for security
@@ -25,13 +32,18 @@ mcp: FastMCP = FastMCP("zotero-mcp", mask_error_details=True)
 
 
 @mcp.tool
-async def get_collection_items(collection_key: str, ctx: Context) -> SearchCollectionResponse:
+async def get_collection_items(
+    collection_key: str,
+    ctx: Context,
+    include_subcollections: bool = False,
+) -> SearchCollectionResponse:
     """
     Search and evaluate items in a specific collection.
     Returns items with abstracts and metadata for assessment.
 
     Args:
         collection_key: The collection key to retrieve items from
+        include_subcollections: If True, recursively include items from all subcollections (default: False)
 
     Returns:
         SearchCollectionResponse with items from the collection
@@ -46,10 +58,32 @@ async def get_collection_items(collection_key: str, ctx: Context) -> SearchColle
     - The 'current_chunk' and 'total_chunks' fields show progress (e.g., current_chunk=1, total_chunks=3)
     - The 'message' field provides specific instructions for retrieving next chunk
     """
-    # Use read client for collection retrieval (prefers local)
-    client = client_router.read_client
-    collection = await client.get_collection(key=collection_key)
-    filtered_items = collection.items.all()
+    # Use router directly (implements protocol with fallback)
+
+    collection = await _zotero_client.get_collection(key=collection_key)
+    # Helper function to recursively collect items from subcollections
+    if not collection:
+        raise ZoteroNotFoundError("collection", collection_key)
+
+    def collect_items_recursive(coll: Collection) -> list[ZoteroItem]:
+        items = coll.items.all()
+        if include_subcollections:
+            for subcoll in coll.subcollections:
+                items.extend(collect_items_recursive(subcoll))
+        return items
+
+    # Collect items (with or without subcollections)
+    filtered_items = collect_items_recursive(collection)
+
+    # Remove duplicates by key (items can appear in multiple collections)
+    seen_keys = set()
+    unique_items = []
+    for item in filtered_items:
+        if item.key not in seen_keys:
+            seen_keys.add(item.key)
+            unique_items.append(item)
+
+    filtered_items = unique_items
     await ctx.debug("\n".join([str(i) for i in filtered_items]))
 
     # Chunk if needed
@@ -163,20 +197,21 @@ async def search_articles(
         # Multiple tags create AND logic in Zotero API
         search_params["tag"] = tags
 
-    # Use read client for search (prefers local)
-    client = client_router.read_client
-
-    # Execute search
+    # Execute search using router (implements protocol with fallback)
     if collection_key:
         # Search within specific collection
-        collection = await client.get_collection(key=collection_key)
+        collection = await _zotero_client.get_collection(key=collection_key)
         # Get items using iterator and apply filters
+        if not collection:
+            raise ZoteroNotFoundError("collection", collection_key)
         all_items = collection.items.all()
         filtered_items = all_items
     else:
         # Search across entire library
         # Use pyzotero's items() method with search parameters
-        raw_items = client._client.items(**search_params)
+        # Access underlying client via read_client for direct pyzotero access
+        raise NotImplementedError
+        raw_items = _zotero_client.items
         filtered_items = [ZoteroItem.model_validate(item) for item in raw_items]
 
     # Manual tag filtering if needed (pyzotero may not support all tag logic)
@@ -262,6 +297,116 @@ async def get_item_notes(item_key: str) -> list[Note]:
 
 
 @mcp.tool
+async def create_collection(name: str, parent_collection_key: str | None = None) -> dict[str, Any]:
+    """
+    Create a new collection in Zotero library.
+
+    Collections are used to organize items in your library. You can create
+    top-level collections or nested subcollections by specifying a parent.
+
+    Args:
+        name: Name of the new collection
+        parent_collection_key: Optional parent collection key for creating subcollections
+
+    Returns:
+        Dictionary with collection details including key, name, and version
+
+    Note:
+        This operation requires web API access with write permissions.
+        Make sure ZOTERO_API_KEY is configured with write access.
+
+    Examples:
+        # Create a top-level collection
+        create_collection(name="Machine Learning Papers")
+
+        # Create a subcollection
+        parent = create_collection(name="AI Research")
+        create_collection(name="Neural Networks", parent_collection_key=parent["key"])
+    """
+    # Create CollectionCreate model
+    collection_data = CollectionCreate(name=name, parent_collection=parent_collection_key)
+
+    # Use client_router which implements web-only operations
+    created_collections = await _zotero_client.create_collections([collection_data])
+
+    if not created_collections:
+        return {"error": "Failed to create collection"}
+
+    # Return the first (and only) created collection
+    created = created_collections[0]
+    return {
+        "key": created.key,
+        "name": created.name,
+        "version": created.version,
+        "parent_collection": parent_collection_key,
+    }
+
+
+@mcp.tool
+async def add_item_by_doi(
+    doi: str, collection_key: str | None = None, tags: list[str] | None = None
+) -> ZoteroItem:
+    """
+    Add a new item to Zotero library by DOI (Digital Object Identifier).
+
+    This tool automatically fetches bibliographic metadata from Crossref API
+    using the provided DOI, converts it to Zotero format, and creates the item
+    in your library. Optionally adds the item to a collection and applies tags.
+
+    Args:
+        doi: Digital Object Identifier (e.g., "10.1234/example" or "https://doi.org/10.1234/example")
+        collection_key: Optional collection key to add the item to after creation
+        tags: Optional list of tags to apply to the item
+
+    Returns:
+        ZoteroItem object with the created item details
+
+    Note:
+        - This operation requires web API access with write permissions
+        - DOI must be valid and exist in Crossref database
+        - The item type (article, book, etc.) is automatically determined from metadata
+        - If collection_key is provided, the item is automatically added to that collection
+
+    Examples:
+        # Add article by DOI
+        item = add_item_by_doi("10.1038/nature12373")
+
+        # Add to specific collection with tags
+        item = add_item_by_doi(
+            doi="10.1038/nature12373",
+            collection_key="ABC123XYZ",
+            tags=["important", "to-read"]
+        )
+    """
+    # Fetch metadata from Crossref
+    crossref_metadata = await crossref_client.get_metadata_by_doi(doi)
+
+    # Convert to Zotero format (returns ItemCreate)
+    item_create = crossref_client.crossref_to_zotero(crossref_metadata)
+
+    # Add tags if provided
+    if tags:
+        from .models import ZoteroTag
+
+        item_create.tags = [ZoteroTag(tag=tag) for tag in tags]
+
+    # Add collection if provided
+    if collection_key:
+        # ItemCreate supports extra fields via model_config
+        item_create.collections = [collection_key]
+
+    # Create item in Zotero
+    created_items = await _zotero_client.create_items([item_create])
+
+    if not created_items:
+        from .exceptions import ZoteroWriteError
+
+        raise ZoteroWriteError("add_item_by_doi", {"error": "Failed to create item from DOI"})
+
+    return created_items[0]
+
+
+@mcp.tool
 async def get_item_fulltext(item_key: str) -> FulltextResponse:
     """
     Get full text content for a Zotero item (e.g., from PDF attachment).
@@ -295,15 +440,13 @@ async def get_item_fulltext(item_key: str) -> FulltextResponse:
         if result.has_more:
             next_part = get_next_fulltext_chunk(result.chunk_id)
     """
-    # Use read client for fulltext (prefers local, supports fulltext since Jan 2025)
-    client = client_router.read_client
-
+    # Use router with automatic fallback (local->web)
     # Try Zotero's pre-indexed fulltext API first (fast)
-    fulltext = await client.get_fulltext(item_key)
+    fulltext = await _zotero_client.get_fulltext(item_key)
 
     # If unavailable, fallback to direct PDF parsing
     if not fulltext:
-        fulltext = await client.get_pdf_text(item_key)
+        fulltext = await _zotero_client.get_pdf_text(item_key)
 
     if not fulltext:
         return FulltextResponse(
@@ -390,9 +533,8 @@ async def get_next_fulltext_chunk(chunk_id: str) -> FulltextResponse:
 @mcp.resource("resource://collections")
 async def list_collections() -> str:
     """List available Zotero collections."""
-    # Use read client for listing collections (prefers local)
-    client = client_router.read_client
-    collections = client.collections
+    # Use router directly (implements protocol with fallback)
+    collections = _zotero_client.collections
 
     if not collections:
         return "No collections found in library"

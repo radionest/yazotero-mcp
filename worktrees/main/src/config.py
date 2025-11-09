@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     zotero_library_type: str = Field(default="user")
 
     # Performance settings
-    max_chunk_size: int = Field(default=20000)
+    max_chunk_size: int = Field(default=18000)
     cache_ttl: int = Field(default=300)
 
     @model_validator(mode="after")

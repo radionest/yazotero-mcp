@@ -103,3 +103,70 @@ class TestZoteroClientRouter:
         assert "mode=" in repr_str
         assert "local=" in repr_str
         assert "web=" in repr_str
+
+
+class TestZoteroClientProtocolImplementation:
+    """Test that ZoteroClientRouter correctly implements ZoteroClientProtocol."""
+
+    def test_router_has_protocol_properties(self):
+        """Test that router has all required protocol properties."""
+        settings = Settings(zotero_local=True, zotero_library_id="1")
+        router = ZoteroClientRouter(settings=settings)
+
+        # Check required properties exist
+        assert hasattr(router, "mode")
+        assert hasattr(router, "cache")
+        assert hasattr(router, "items")
+        assert hasattr(router, "collections")
+
+        # Check property types
+        assert isinstance(router.mode, str)
+        assert isinstance(router.cache, dict)
+
+    def test_router_has_protocol_methods(self):
+        """Test that router has all required protocol methods."""
+        settings = Settings(zotero_local=True, zotero_library_id="1")
+        router = ZoteroClientRouter(settings=settings)
+
+        # Read operation methods
+        read_methods = [
+            "get_collection",
+            "get_item",
+            "get_raw_item",
+            "get_children",
+            "get_fulltext",
+            "get_pdf_text",
+            "get_all_items",
+            "get_item_template",
+            "get_collection_items_list",
+        ]
+
+        for method_name in read_methods:
+            assert hasattr(router, method_name)
+            assert callable(getattr(router, method_name))
+
+        # Write operation methods
+        write_methods = [
+            "create_items",
+            "update_item",
+            "delete_item",
+            "delete_item_by_key",
+            "create_collections",
+            "delete_collection_by_key",
+            "add_to_collection",
+        ]
+
+        for method_name in write_methods:
+            assert hasattr(router, method_name)
+            assert callable(getattr(router, method_name))
+
+    @pytest.mark.asyncio
+    async def test_router_protocol_delegation(self):
+        """Test that router methods delegate to appropriate clients."""
+        settings = Settings(zotero_local=True, zotero_library_id="1")
+        router = ZoteroClientRouter(settings=settings)
+
+        # Check that router delegates property access
+        if router.has_local_client:
+            # Cache should come from read_client
+            assert router.cache is router.read_client.cache

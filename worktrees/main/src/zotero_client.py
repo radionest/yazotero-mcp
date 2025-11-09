@@ -14,7 +14,7 @@ from .models import (
     ZoteroItem,
     ZoteroWriteResponse,
 )
-from .protocols import webonly
+from .protocols import ZoteroClientProtocol, webonly
 
 
 class ItemsIterator:
@@ -125,7 +125,7 @@ class Collection:
         return f"Collection(key={self.key!r}, name={self.name!r})"
 
 
-class ZoteroClient:
+class ZoteroClient(ZoteroClientProtocol):
     """Simplified client supporting both local and web access."""
 
     def __init__(self, settings: config.Settings | None = None) -> None:
@@ -137,15 +137,19 @@ class ZoteroClient:
         self.settings = settings or config.settings
 
         if self.settings.zotero_local:
-            self.mode = "local"
+            self._mode = "local"
             self._client = self._init_local_client()
         else:
-            self.mode = "web"
+            self._mode = "web"
             self._client = self._init_web_client()
 
         self.cache: dict[str, Any] = {}  # Simple in-memory cache
         self._items: ItemsIterator | None = None
         self._collections: list[Collection] | None = None
+
+    @property
+    def mode(self) -> str:
+        return self._mode
 
     def _init_web_client(self) -> zotero.Zotero:
         """Initialize web Zotero client using remote API."""
