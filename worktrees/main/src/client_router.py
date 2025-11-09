@@ -6,15 +6,21 @@ based on operation type and availability.
 
 from typing import TYPE_CHECKING, Any, overload
 
-from src.protocols import ZoteroClientProtocol
-
 from . import config
 from .exceptions import ConfigurationError
+from .protocols import ZoteroClientProtocol
 from .zotero_client import ZoteroClient
 
 if TYPE_CHECKING:
-    from .models import Attachment, CollectionCreate, ItemCreate, ItemUpdate, ZoteroItem
-    from .zotero_client import Collection, ItemsIterator
+    from .models import (
+        Attachment,
+        CollectionCreate,
+        ItemCreate,
+        ItemUpdate,
+        ZoteroCollectionBase,
+        ZoteroItem,
+        ZoteroItemIterator,
+    )
 
 
 class ZoteroClientRouter(ZoteroClientProtocol):
@@ -204,26 +210,26 @@ class ZoteroClientRouter(ZoteroClientProtocol):
         return self.read_client.cache
 
     @property
-    def items(self) -> "ItemsIterator":
+    def items(self) -> "ZoteroItemIterator":
         """Lazy iterator over all items (uses read client)."""
         return self.read_client.items
 
     @property
-    def collections(self) -> list["Collection"]:
+    def collections(self) -> list["ZoteroCollectionBase"]:
         """Get all collections (uses read client)."""
         return self.read_client.collections
 
         # Read operations (support local and web)
 
     @overload
-    async def get_collection(self, *, name: str) -> Collection | None: ...
+    async def get_collection(self, *, name: str) -> "ZoteroCollectionBase | None": ...
 
     @overload
-    async def get_collection(self, *, key: str) -> Collection: ...
+    async def get_collection(self, *, key: str) -> "ZoteroCollectionBase": ...
 
     async def get_collection(
         self, name: str | None = None, *, key: str | None = None
-    ) -> "Collection | None":
+    ) -> "ZoteroCollectionBase | None":
         """Get collection by name or key (read operation with fallback)."""
         match key, name:
             case None, None:
@@ -348,7 +354,9 @@ class ZoteroClientRouter(ZoteroClientProtocol):
         """Delete item by key (write operation - web only)."""
         await self.write_client.delete_item_by_key(item_key)
 
-    async def create_collections(self, collections: list["CollectionCreate"]) -> list["Collection"]:
+    async def create_collections(
+        self, collections: list["CollectionCreate"]
+    ) -> list["ZoteroCollectionBase"]:
         """Create collections (write operation - web only)."""
         return await self.write_client.create_collections(collections)
 

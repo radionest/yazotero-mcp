@@ -8,6 +8,7 @@ from src.exceptions import DOINotFoundError, InvalidDOIError, ZoteroNotFoundErro
 from src.mcp_server import mcp
 from src.models import ItemCreate
 from src.zotero_client import ZoteroClient
+from tests.test_helpers import ZoteroTestDataManager
 
 
 class TestCrossrefClient:
@@ -112,7 +113,7 @@ class TestAddItemByDOI:
     @pytest.mark.asyncio
     async def test_add_item_by_doi_simple(
         self,
-        test_data_manager,
+        test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
     ) -> None:
         """Test adding an item using a valid DOI."""
@@ -139,7 +140,7 @@ class TestAddItemByDOI:
     @pytest.mark.asyncio
     async def test_add_item_by_doi_with_tags(
         self,
-        test_data_manager,
+        test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
     ) -> None:
         """Test adding an item with tags."""
@@ -166,7 +167,7 @@ class TestAddItemByDOI:
     @pytest.mark.asyncio
     async def test_add_item_by_doi_to_collection(
         self,
-        test_data_manager,
+        test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
     ) -> None:
         """Test adding an item to a specific collection."""
@@ -201,7 +202,7 @@ class TestAddItemByDOI:
     @pytest.mark.asyncio
     async def test_add_item_by_doi_with_url_format(
         self,
-        test_data_manager,
+        test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that DOI URLs are properly handled."""
@@ -224,7 +225,7 @@ class TestAddItemByDOI:
     @pytest.mark.asyncio
     async def test_add_item_by_invalid_doi(
         self,
-        test_data_manager,
+        test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
     ) -> None:
         """Test that invalid DOI raises appropriate error."""

@@ -2,21 +2,20 @@ from typing import Any
 
 from fastmcp import Context, FastMCP
 
-from src.exceptions import ZoteroNotFoundError
-from src.protocols import ZoteroClientProtocol
-
 from .chunker import ResponseChunker, TextChunker
 from .client_router import client_router
 from .crossref_client import crossref_client
+from .exceptions import ZoteroNotFoundError
 from .models import (
     CollectionCreate,
     FulltextResponse,
     Note,
     SearchCollectionResponse,
+    ZoteroCollectionBase,
     ZoteroItem,
 )
 from .note_manager import NoteManager
-from .zotero_client import Collection
+from .protocols import ZoteroClientProtocol
 
 # Initialize components
 _chunker: ResponseChunker = ResponseChunker()
@@ -65,7 +64,7 @@ async def get_collection_items(
     if not collection:
         raise ZoteroNotFoundError("collection", collection_key)
 
-    def collect_items_recursive(coll: Collection) -> list[ZoteroItem]:
+    def collect_items_recursive(coll: ZoteroCollectionBase) -> list[ZoteroItem]:
         items = coll.items.all()
         if include_subcollections:
             for subcoll in coll.subcollections:

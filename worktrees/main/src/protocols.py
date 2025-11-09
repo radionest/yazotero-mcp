@@ -8,8 +8,15 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, Protocol, overload
 
-from src.models import Attachment, CollectionCreate, ItemCreate, ItemUpdate, ZoteroItem
-from src.zotero_client import Collection, ItemsIterator
+from src.models import (
+    Attachment,
+    CollectionCreate,
+    ItemCreate,
+    ItemUpdate,
+    ZoteroCollectionBase,
+    ZoteroItem,
+    ZoteroItemIterator,
+)
 
 from .exceptions import WebOnlyOperationError
 
@@ -81,25 +88,25 @@ class ZoteroClientProtocol(Protocol):
         ...
 
     @property
-    def items(self) -> "ItemsIterator":
+    def items(self) -> ZoteroItemIterator:
         """Lazy iterator over all items in library."""
         ...
 
     @property
-    def collections(self) -> list["Collection"]:
+    def collections(self) -> list[ZoteroCollectionBase]:
         """Get all collections with pagination support."""
         ...
 
     # Read operations (support local and web)
     @overload
-    async def get_collection(self, *, name: str) -> Collection | None: ...
+    async def get_collection(self, *, name: str) -> ZoteroCollectionBase | None: ...
 
     @overload
-    async def get_collection(self, *, key: str) -> Collection: ...
+    async def get_collection(self, *, key: str) -> ZoteroCollectionBase: ...
 
     async def get_collection(
         self, name: str | None = None, *, key: str | None = None
-    ) -> Collection | None:
+    ) -> ZoteroCollectionBase | None:
         """Get collection by name or key."""
         ...
 
@@ -152,7 +159,9 @@ class ZoteroClientProtocol(Protocol):
         """Delete item by key string."""
         ...
 
-    async def create_collections(self, collections: list["CollectionCreate"]) -> list["Collection"]:
+    async def create_collections(
+        self, collections: list[CollectionCreate]
+    ) -> list[ZoteroCollectionBase]:
         """Create new collections."""
         ...
 

@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -6,6 +8,83 @@ from pydantic import BaseModel, Field, computed_field
 
 if TYPE_CHECKING:
     pass
+
+
+# Abstract base classes for Zotero collections and iterators
+
+
+class ZoteroItemIterator(ABC):
+    """Abstract base class for Zotero item iterators.
+
+    Provides lazy iteration over Zotero items with pagination support.
+    """
+
+    @abstractmethod
+    def __len__(self) -> int:
+        """Get total count of items without loading all of them."""
+        ...
+
+    @abstractmethod
+    def __iter__(self) -> Iterator["ZoteroItem"]:
+        """Iterate over all items, fetching in batches as needed."""
+        ...
+
+    @abstractmethod
+    def all(self) -> list["ZoteroItem"]:
+        """Fetch all items at once."""
+        ...
+
+    @abstractmethod
+    def keys(self) -> list[str]:
+        """Get all item keys."""
+        ...
+
+
+class ZoteroCollectionBase(ABC):
+    """Abstract base class for Zotero collections.
+
+    Represents a collection with lazy-loaded items and subcollections.
+    """
+
+    @property
+    @abstractmethod
+    def key(self) -> str:
+        """Collection key."""
+        ...
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Collection name."""
+        ...
+
+    @property
+    @abstractmethod
+    def version(self) -> int:
+        """Collection version."""
+        ...
+
+    @property
+    @abstractmethod
+    def items(self) -> ZoteroItemIterator:
+        """Lazy iterator over items in this collection."""
+        ...
+
+    @property
+    @abstractmethod
+    def subcollections(self) -> list["ZoteroCollectionBase"]:
+        """Get subcollections (loaded once)."""
+        ...
+
+    @abstractmethod
+    def delete(self) -> None:
+        """Delete this collection."""
+        ...
+
+    @abstractmethod
+    def __repr__(self) -> str:
+        """String representation of the collection."""
+        ...
 
 
 class ZoteroTag(BaseModel):
@@ -17,6 +96,22 @@ class ZoteroTag(BaseModel):
 
     tag: str
     type: int = 0
+
+
+class ZoteroCreator(BaseModel):
+    """Zotero creator (author, editor, etc.) model.
+
+    Supports two formats:
+    - firstName/lastName for individuals
+    - name for organizations
+    """
+
+    creator_type: str = Field(alias="creatorType")
+    first_name: str | None = Field(None, alias="firstName")
+    last_name: str | None = Field(None, alias="lastName")
+    name: str | None = None
+
+    model_config = {"populate_by_name": True}
 
 
 class AnalysisType(str, Enum):
@@ -36,15 +131,38 @@ class NoteAction(str, Enum):
 class ZoteroItemData(BaseModel):
     """Item data fields from Zotero API (nested under 'data' key)."""
 
-    title: str = ""
-    abstract_note: str = Field("", alias="abstractNote")
+    # Core fields (common to all item types)
     item_type: str = Field("", alias="itemType")
-    creators: list[dict[str, str]] = Field(default_factory=list)
+    title: str = ""
+    creators: list[ZoteroCreator] = Field(default_factory=list)
+    abstract_note: str = Field("", alias="abstractNote")
     date: str = ""
     tags: list[ZoteroTag] = Field(default_factory=list)
     collections: list[str] = Field(default_factory=list)
-    # Allow additional fields for different item types
-    model_config = {"extra": "allow", "populate_by_name": True}
+
+    # Identifiers
+    doi: str | None = Field(None, alias="DOI")
+    url: str | None = None
+    isbn: str | None = Field(None, alias="ISBN")
+    issn: str | None = Field(None, alias="ISSN")
+
+    # Publication fields (journalArticle, conferencePaper)
+    publication_title: str | None = Field(None, alias="publicationTitle")
+    volume: str | None = None
+    issue: str | None = None
+    pages: str | None = None
+
+    # Conference fields
+    proceedings_title: str | None = Field(None, alias="proceedingsTitle")
+
+    # Book fields
+    publisher: str | None = None
+
+    # Note fields
+    note: str | None = None
+    parent_item: str | None = Field(None, alias="parentItem")
+
+    model_config = {"populate_by_name": True}
 
 
 class ZoteroItem(BaseModel):
@@ -88,7 +206,7 @@ class ZoteroItem(BaseModel):
         return [tag.tag for tag in self.data.tags]
 
     @property
-    def creators(self) -> list[dict[str, str]]:
+    def creators(self) -> list[ZoteroCreator]:
         """Raw creators list."""
         return self.data.creators
 
@@ -96,8 +214,8 @@ class ZoteroItem(BaseModel):
         """Extract authors as (first_name, last_name) tuples."""
         authors = []
         for creator in self.data.creators:
-            if creator.get("creatorType") == "author":
-                authors.append((creator.get("firstName", ""), creator.get("lastName", "")))
+            if creator.creator_type == "author":
+                authors.append((creator.first_name or "", creator.last_name or ""))
         return authors
 
 
@@ -185,24 +303,84 @@ class ChunkResponse(BaseModel):
 
 
 class ItemCreate(BaseModel):
-    """Model for creating new Zotero items (notes, attachments, etc)."""
+    """Model for creating new Zotero items (articles, books, notes, etc).
 
+    Supports all common Zotero item types with type-safe field validation.
+    """
+
+    # Core fields (itemType is required for creation)
     item_type: str = Field(alias="itemType")
-    parent_item: str | None = Field(None, alias="parentItem")
-    note: str | None = None
+    title: str = ""
+    creators: list[ZoteroCreator] = Field(default_factory=list)
+    abstract_note: str | None = Field(None, alias="abstractNote")
+    date: str = ""
     tags: list[ZoteroTag] = Field(default_factory=list)
     collections: list[str] = Field(default_factory=list)
-    # Allow additional fields for different item types
-    model_config = {"extra": "allow", "populate_by_name": True}
+
+    # Identifiers
+    doi: str | None = Field(None, alias="DOI")
+    url: str | None = None
+    isbn: str | None = Field(None, alias="ISBN")
+    issn: str | None = Field(None, alias="ISSN")
+
+    # Publication fields (journalArticle, conferencePaper)
+    publication_title: str | None = Field(None, alias="publicationTitle")
+    volume: str | None = None
+    issue: str | None = None
+    pages: str | None = None
+
+    # Conference fields
+    proceedings_title: str | None = Field(None, alias="proceedingsTitle")
+
+    # Book fields
+    publisher: str | None = None
+
+    # Note fields
+    note: str | None = None
+    parent_item: str | None = Field(None, alias="parentItem")
+
+    model_config = {"populate_by_name": True}
 
 
 class ItemUpdate(BaseModel):
-    """Model for updating existing Zotero items."""
+    """Model for updating existing Zotero items.
 
-    note: str | None = None
+    All fields are optional - only specified fields will be updated.
+    Use exclude_none=True when serializing for PATCH-like behavior.
+    """
+
+    # Core fields (all optional for updates)
+    item_type: str | None = Field(None, alias="itemType")
+    title: str | None = None
+    creators: list[ZoteroCreator] | None = None
+    abstract_note: str | None = Field(None, alias="abstractNote")
+    date: str | None = None
     tags: list[ZoteroTag] | None = None
-    # Allow additional fields for different item types
-    model_config = {"extra": "allow"}
+    collections: list[str] | None = None
+
+    # Identifiers
+    doi: str | None = Field(None, alias="DOI")
+    url: str | None = None
+    isbn: str | None = Field(None, alias="ISBN")
+    issn: str | None = Field(None, alias="ISSN")
+
+    # Publication fields
+    publication_title: str | None = Field(None, alias="publicationTitle")
+    volume: str | None = None
+    issue: str | None = None
+    pages: str | None = None
+
+    # Conference fields
+    proceedings_title: str | None = Field(None, alias="proceedingsTitle")
+
+    # Book fields
+    publisher: str | None = None
+
+    # Note fields
+    note: str | None = None
+    parent_item: str | None = Field(None, alias="parentItem")
+
+    model_config = {"populate_by_name": True}
 
 
 class Attachment(BaseModel):

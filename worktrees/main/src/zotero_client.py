@@ -10,14 +10,16 @@ from .models import (
     CollectionCreate,
     ItemCreate,
     ItemUpdate,
+    ZoteroCollectionBase,
     ZoteroCollectionResponse,
     ZoteroItem,
+    ZoteroItemIterator,
     ZoteroWriteResponse,
 )
 from .protocols import ZoteroClientProtocol, webonly
 
 
-class ItemsIterator:
+class ItemsIterator(ZoteroItemIterator):
     """Lazy iterator for Zotero items with pagination support.
 
     Supports:
@@ -68,7 +70,7 @@ class ItemsIterator:
         return [item.key for item in self.all()]
 
 
-class Collection:
+class Collection(ZoteroCollectionBase):
     """Represents a Zotero collection with lazy-loaded items."""
 
     def __init__(self, client: zotero.Zotero, data: dict[str, Any]):
@@ -82,8 +84,8 @@ class Collection:
         # Validate incoming data with Pydantic
         self._validated_data = ZoteroCollectionResponse.model_validate(data)
         self._data = data  # Keep raw data for pyzotero compatibility
-        self._items: ItemsIterator | None = None
-        self._subcollections: list[Collection] | None = None
+        self._items: ZoteroItemIterator | None = None
+        self._subcollections: list[ZoteroCollectionBase] | None = None
 
     @property
     def key(self) -> str:
@@ -101,7 +103,7 @@ class Collection:
         return self._validated_data.version
 
     @property
-    def items(self) -> ItemsIterator:
+    def items(self) -> ZoteroItemIterator:
         """Lazy iterator over items in this collection."""
         if self._items is None:
             self._items = ItemsIterator(
@@ -110,7 +112,7 @@ class Collection:
         return self._items
 
     @property
-    def subcollections(self) -> list["Collection"]:
+    def subcollections(self) -> list[ZoteroCollectionBase]:
         """Get subcollections (loaded once)."""
         if self._subcollections is None:
             subcoll_data = self._client.collections_sub(self.key)
@@ -143,13 +145,17 @@ class ZoteroClient(ZoteroClientProtocol):
             self._mode = "web"
             self._client = self._init_web_client()
 
-        self.cache: dict[str, Any] = {}  # Simple in-memory cache
-        self._items: ItemsIterator | None = None
-        self._collections: list[Collection] | None = None
+        self._cache: dict[str, Any] = {}  # Simple in-memory cache
+        self._items: ZoteroItemIterator | None = None
+        self._collections: list[ZoteroCollectionBase] | None = None
 
     @property
     def mode(self) -> str:
         return self._mode
+
+    @property
+    def cache(self) -> dict[str, Any]:
+        return self._cache
 
     def _init_web_client(self) -> zotero.Zotero:
         """Initialize web Zotero client using remote API."""
@@ -175,7 +181,7 @@ class ZoteroClient(ZoteroClientProtocol):
         return zotero.Zotero(library_id, library_type, local=True)
 
     @property
-    def items(self) -> ItemsIterator:
+    def items(self) -> ZoteroItemIterator:
         """Lazy iterator over all items in library.
 
         Usage:
@@ -197,7 +203,7 @@ class ZoteroClient(ZoteroClientProtocol):
         return self._items
 
     @property
-    def collections(self) -> list[Collection]:
+    def collections(self) -> list[ZoteroCollectionBase]:
         """Get all collections (with pagination support).
 
         Usage:
@@ -211,14 +217,14 @@ class ZoteroClient(ZoteroClientProtocol):
         return self._collections
 
     @overload
-    async def get_collection(self, *, name: str) -> Collection | None: ...
+    async def get_collection(self, *, name: str) -> ZoteroCollectionBase | None: ...
 
     @overload
-    async def get_collection(self, *, key: str) -> Collection: ...
+    async def get_collection(self, *, key: str) -> ZoteroCollectionBase: ...
 
     async def get_collection(
         self, name: str | None = None, *, key: str | None = None
-    ) -> Collection | None:
+    ) -> ZoteroCollectionBase | None:
         """Get collection by name or key.
 
         Args:
@@ -279,7 +285,7 @@ class ZoteroClient(ZoteroClientProtocol):
 
             if not pdf_attachment:
                 # No PDF attachment found - cache failure
-                self.cache[cache_key] = None
+                self._cache[cache_key] = None
                 return None
 
             # Get fulltext from PDF attachment using its key
@@ -289,13 +295,13 @@ class ZoteroClient(ZoteroClientProtocol):
             content = fulltext_data.get("content")
 
             if content:
-                self.cache[cache_key] = content
+                self._cache[cache_key] = content
                 return str(content)
 
         except Exception:
             # Item may not have fulltext available
             # Cache the failure to avoid repeated API calls
-            self.cache[cache_key] = None
+            self._cache[cache_key] = None
             # Don't raise here - return None to indicate no content available
             # Callers should check for None and raise ContentNotAvailableError if needed
             pass
@@ -343,7 +349,7 @@ class ZoteroClient(ZoteroClientProtocol):
 
             if not pdf_attachment:
                 # No PDF attachment found - cache failure
-                self.cache[cache_key] = None
+                self._cache[cache_key] = None
                 return None
 
             # Download PDF file content
@@ -368,12 +374,12 @@ class ZoteroClient(ZoteroClientProtocol):
             full_text = "\n\n".join(text_parts)
 
             if full_text:
-                self.cache[cache_key] = full_text
+                self._cache[cache_key] = full_text
                 return full_text
 
         except Exception:
             # PDF download or parsing failed - cache failure
-            self.cache[cache_key] = None
+            self._cache[cache_key] = None
             # Don't raise here - return None to indicate no content available
             pass
 
@@ -510,7 +516,9 @@ class ZoteroClient(ZoteroClientProtocol):
         return template
 
     @webonly
-    async def create_collections(self, collections: list[CollectionCreate]) -> list[Collection]:
+    async def create_collections(
+        self, collections: list[CollectionCreate]
+    ) -> list[ZoteroCollectionBase]:
         """Create new collections.
 
         Args:
