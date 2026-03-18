@@ -141,7 +141,7 @@ class TestSearchE2E:
         """Test that search_articles responses stay under MCP 25000 token limit."""
         collection_key, _ = basic_collection_with_items
 
-        request = {"collection_key": collection_key}
+        request = {"search_params": {}, "collection_key": collection_key}
 
         async with Client(mcp) as client:
             result = await client.call_tool("search_articles", arguments=request)
@@ -232,3 +232,53 @@ class TestSearchE2E:
 
             # Verify we got multiple chunks
             assert chunk_count > 1, "Should have multiple chunks for this test"
+
+    @pytest.mark.asyncio
+    async def test_search_articles_library_wide(
+        self,
+        test_zotero_client: ZoteroClient,
+    ) -> None:
+        """Test search_articles without collection_key searches entire library."""
+        request = {"search_params": {"q": "test"}}
+
+        async with Client(mcp) as client:
+            result = await client.call_tool("search_articles", arguments=request)
+            response = result.data
+
+        # Should return results or empty list, not raise NotImplementedError
+        assert isinstance(response.items, list)
+        assert response.count >= 0
+        assert not response.has_more or response.chunk_id is not None
+
+    @pytest.mark.asyncio
+    async def test_search_articles_with_item_type(
+        self,
+        test_zotero_client: ZoteroClient,
+    ) -> None:
+        """Test search_articles with item_type filter."""
+        request = {"search_params": {"item_type": "journalArticle"}}
+
+        async with Client(mcp) as client:
+            result = await client.call_tool("search_articles", arguments=request)
+            response = result.data
+
+        # All returned items should be journal articles
+        for item in response.items:
+            assert item.data.itemType == "journalArticle"
+
+    @pytest.mark.asyncio
+    async def test_search_articles_combined_filters(
+        self,
+        test_zotero_client: ZoteroClient,
+    ) -> None:
+        """Test search_articles with multiple search parameters combined."""
+        request = {"search_params": {"q": "learning", "item_type": "journalArticle"}}
+
+        async with Client(mcp) as client:
+            result = await client.call_tool("search_articles", arguments=request)
+            response = result.data
+
+        # Should apply all filters
+        for item in response.items:
+            assert item.data.itemType == "journalArticle"
+            # Query is applied server-side, so we just verify type here

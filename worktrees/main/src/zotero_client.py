@@ -14,6 +14,7 @@ from .models import (
     ZoteroCollectionResponse,
     ZoteroItem,
     ZoteroItemIterator,
+    ZoteroSearchParams,
     ZoteroWriteResponse,
 )
 from .protocols import ZoteroClientProtocol, webonly
@@ -58,7 +59,7 @@ class ItemsIterator(ZoteroItemIterator):
 
         # Use pyzotero's makeiter for remaining pages
         for batch in self._client.makeiter(self._fetch_func):
-            yield from batch
+            yield from (ZoteroItem.model_validate(i) for i in batch)
 
     def all(self) -> list[ZoteroItem]:
         """Fetch all items at once using everything()."""
@@ -494,6 +495,32 @@ class ZoteroClient(ZoteroClientProtocol):
             item_dict["data"][key] = value
 
         self._client.update_item(item_dict)
+
+    async def search_items(self, search_params: ZoteroSearchParams) -> list[ZoteroItem]:
+        """Search items across entire library with Zotero API parameters.
+
+        Uses pyzotero's items() method with search parameters, fetching all results
+        with automatic pagination via everything().
+
+        Args:
+            search_params: ZoteroSearchParams model with search/filter parameters
+
+        Returns:
+            List of ZoteroItem matching search criteria
+
+        Example:
+            search_params = ZoteroSearchParams(
+                q="machine learning",
+                qmode="titleCreatorYear",
+                item_type="journalArticle"
+            )
+            items = await client.search_items(search_params)
+        """
+        # Convert model to API params dict and use pyzotero's items()
+        # everything() handles pagination automatically
+        api_params = search_params.to_api_params()
+        raw_items = self._client.everything(self._client.items(**api_params))
+        return [ZoteroItem.model_validate(item) for item in raw_items]
 
     async def get_all_items(self) -> list[dict[str, Any]]:
         """Get all items in library as raw dicts.

@@ -59,8 +59,7 @@ class ZoteroWriteError(ZoteroError):
 
         # Build human-readable error message
         failed_details = [
-            f"Index {idx}: {fail.get('message', 'Unknown error')} "
-            f"(code {fail.get('code', 'N/A')})"
+            f"Index {idx}: {fail.message} (code {fail.code})"
             for idx, fail in failures.items()
         ]
         message = f"Failed to {operation}: {'; '.join(failed_details)}"

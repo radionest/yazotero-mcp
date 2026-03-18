@@ -5,7 +5,7 @@ from fastmcp import Context, FastMCP
 from .chunker import ResponseChunker, TextChunker
 from .client_router import client_router
 from .crossref_client import crossref_client
-from .exceptions import ZoteroNotFoundError
+from .exceptions import ZoteroError, ZoteroNotFoundError
 from .models import (
     CollectionCreate,
     FulltextResponse,
@@ -13,6 +13,7 @@ from .models import (
     SearchCollectionResponse,
     ZoteroCollectionBase,
     ZoteroItem,
+    ZoteroSearchParams,
 )
 from .note_manager import NoteManager
 from .protocols import ZoteroClientProtocol
@@ -27,8 +28,70 @@ _note_manager = NoteManager(_zotero_client)
 
 # Create FastMCP server with error masking for security
 # Custom exceptions (ToolError subclasses) will still show details to clients
-mcp: FastMCP = FastMCP("zotero-mcp", mask_error_details=True)
+mcp: FastMCP = FastMCP(
+    "zotero-mcp",
+    mask_error_details=True,
+    instructions="""
+## Zotero MCP Endpoints
 
+### Search Operations
+- `search_articles(query, tags, collection_key, item_type)`: Search with flexible filters
+  - Returns items with abstracts/metadata
+  - Supports chunking (check `has_more`, use `get_next_chunk`)
+- `get_collection_items(collection_key, include_subcollections)`: Get items from collection
+  - Set `include_subcollections=True` for recursive retrieval
+  - Handles chunked responses
+
+### Fulltext Access
+- `get_item_fulltext(item_key)`: Get PDF text (tries indexed API, falls back to direct parsing)
+  - Returns chunked text (use `get_next_fulltext_chunk` if `has_more=True`)
+- `get_next_fulltext_chunk(chunk_id)`: Continue retrieving text chunks
+
+### Notes
+- `create_note_for_item(item_key, title, content, tags)`: Create note attached to item
+  - `content` can be string or dict (auto-formatted)
+- `get_item_notes(item_key)`: Get all notes for item
+
+### Library Management
+- `add_item_by_doi(doi, collection_key, tags)`: Fetch from Crossref and create item
+- `create_collection(name, parent_collection_key)`: Create collection/subcollection
+
+### Chunking Control
+- `get_next_chunk(chunk_id)`: Get next batch of search results
+  - Always check `has_more` in responses
+  - Continue until `has_more=False`
+
+### Resources
+- `resource://collections`: List all available collections with their keys and names
+  - Use to discover collection_key values for search operations
+- `resource://tags`: List available tags (not yet implemented)
+
+## Typical Workflows
+
+**Get list of items from Collection with given name**
+1. List all collections with resource://collections
+2. Find collection with given name and get its key
+3. If several collections with same name were found ask user which collection to use
+3. Use tool get_collection_items with this key
+
+**Search and read articles:**
+1. `search_articles(query="machine learning")` or `get_collection_items(collection_key="ABC123")`
+2. If `has_more=True`, call `get_next_chunk(chunk_id)` repeatedly
+3. For specific item, call `get_item_fulltext(item_key)`
+4. If fulltext `has_more=True`, call `get_next_fulltext_chunk(chunk_id)` repeatedly
+
+**Add article by DOI:**
+1. `add_item_by_doi(doi="10.1234/example", collection_key="ABC123", tags=["important"])`
+2. Metadata auto-fetched from Crossref
+
+**Create notes:**
+1. Find item using search or get_collection_items tool
+2. `create_note_for_item(item_key, title, content, tags)`
+3. Review with `get_item_notes(item_key)`
+
+**Important:** Always handle chunked responses completely before proceeding to next operation.
+""",
+)
 
 @mcp.tool
 async def get_collection_items(
@@ -140,10 +203,8 @@ async def get_next_chunk(chunk_id: str) -> SearchCollectionResponse:
 
 @mcp.tool
 async def search_articles(
-    query: str | None = None,
-    tags: list[str] | None = None,
+    search_params: ZoteroSearchParams,
     collection_key: str | None = None,
-    item_type: str | None = None,
 ) -> SearchCollectionResponse:
     """
     Search for articles by name, tags, collections, or item type.
@@ -182,19 +243,6 @@ async def search_articles(
         # Combine filters
         search_articles(query="neural networks", tags=["AI"], item_type="journalArticle")
     """
-    # Build search parameters
-    search_params: dict[str, Any] = {}
-
-    if query:
-        search_params["q"] = query
-        search_params["qmode"] = "titleCreatorYear"
-
-    if item_type:
-        search_params["itemType"] = item_type
-
-    if tags:
-        # Multiple tags create AND logic in Zotero API
-        search_params["tag"] = tags
 
     # Execute search using router (implements protocol with fallback)
     if collection_key:
@@ -206,17 +254,16 @@ async def search_articles(
         all_items = collection.items.all()
         filtered_items = all_items
     else:
-        # Search across entire library
-        # Use pyzotero's items() method with search parameters
-        # Access underlying client via read_client for direct pyzotero access
-        raise NotImplementedError
-        raw_items = _zotero_client.items
-        filtered_items = [ZoteroItem.model_validate(item) for item in raw_items]
+        # Search across entire library using search_items method
+        filtered_items = await _zotero_client.search_items(search_params)
 
     # Manual tag filtering if needed (pyzotero may not support all tag logic)
-    if tags:
+    if search_params.tag:
+        tag_filter = (
+            [search_params.tag] if isinstance(search_params.tag, str) else search_params.tag
+        )
         filtered_items = [
-            item for item in filtered_items if all(tag in item.tags() for tag in tags)
+            item for item in filtered_items if all(t in item.tags for t in tag_filter)
         ]
 
     # Chunk if needed
@@ -329,7 +376,7 @@ async def create_collection(name: str, parent_collection_key: str | None = None)
     created_collections = await _zotero_client.create_collections([collection_data])
 
     if not created_collections:
-        return {"error": "Failed to create collection"}
+        raise ZoteroError("Failed to create collection")
 
     # Return the first (and only) created collection
     created = created_collections[0]
@@ -398,9 +445,7 @@ async def add_item_by_doi(
     created_items = await _zotero_client.create_items([item_create])
 
     if not created_items:
-        from .exceptions import ZoteroWriteError
-
-        raise ZoteroWriteError("add_item_by_doi", {"error": "Failed to create item from DOI"})
+        raise ZoteroError("Failed to create item from DOI")
 
     return created_items[0]
 

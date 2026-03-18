@@ -459,3 +459,66 @@ class ZoteroCollectionResponse(BaseModel):
     data: ZoteroCollectionData
 
     model_config = {"extra": "ignore"}
+
+
+class ZoteroSearchParams(BaseModel):
+    """Parameters for searching items in Zotero library.
+
+    Uses Zotero Web API v3 search parameters. All parameters are optional.
+    Multiple filters are combined with AND logic.
+
+    Reference: https://www.zotero.org/support/dev/web_api/v3/basics
+    """
+
+    q: str | None = Field(
+        None,
+        description="Quick search query for titles and creator fields. "
+        "Searches across item titles, creator names, and (with qmode='everything') full-text content.",
+    )
+
+    qmode: str | None = Field(
+        None,
+        description="Search mode for 'q' parameter. Options: "
+        "'titleCreatorYear' (default, searches titles/creators/years), "
+        "'everything' (includes full-text content in search)",
+    )
+
+    item_type: str | None = Field(
+        None,
+        alias="itemType",
+        description="Filter by item type. Supports Boolean syntax: "
+        "'book', 'journalArticle', 'book || journalArticle' (OR), "
+        "'-attachment' (NOT). Common types: journalArticle, book, "
+        "bookSection, conferencePaper, thesis, report, webpage, attachment",
+    )
+
+    tag: str | list[str] | None = Field(
+        None,
+        description="Filter by tags. Can be string or list. Multiple tags use AND logic. "
+        "Supports Boolean syntax: 'foo', 'foo bar || baz' (OR), '-foo' (NOT). "
+        "When passing list, each tag is a separate AND condition",
+    )
+
+    since: int | None = Field(
+        None,
+        description="Return only items modified after this library version number. "
+        "Use for incremental syncing",
+    )
+
+    include_trashed: bool | None = Field(
+        None,
+        alias="includeTrashed",
+        description="Include items in trash. Default: False (0)",
+    )
+
+    item_key: str | None = Field(
+        None,
+        alias="itemKey",
+        description="Comma-separated list of item keys to retrieve (max 50)",
+    )
+
+    model_config = {"populate_by_name": True}
+
+    def to_api_params(self) -> dict[str, Any]:
+        """Convert to dict for pyzotero API calls, excluding None values."""
+        return {k: v for k, v in self.model_dump(by_alias=True, exclude_none=True).items()}

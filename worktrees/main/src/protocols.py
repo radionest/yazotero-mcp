@@ -8,7 +8,8 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, Protocol, overload
 
-from src.models import (
+from .exceptions import WebOnlyOperationError
+from .models import (
     Attachment,
     CollectionCreate,
     ItemCreate,
@@ -16,9 +17,8 @@ from src.models import (
     ZoteroCollectionBase,
     ZoteroItem,
     ZoteroItemIterator,
+    ZoteroSearchParams,
 )
-
-from .exceptions import WebOnlyOperationError
 
 # Type variable for generic function signatures
 
@@ -140,6 +140,17 @@ class ZoteroClientProtocol(Protocol):
 
     async def get_collection_items_list(self, collection_key: str) -> list[dict[str, Any]]:
         """Get all items in a collection as list."""
+        ...
+
+    async def search_items(self, search_params: ZoteroSearchParams) -> list["ZoteroItem"]:
+        """Search items across entire library with Zotero API parameters.
+
+        Args:
+            search_params: ZoteroSearchParams model with search/filter parameters
+
+        Returns:
+            List of ZoteroItem matching search criteria
+        """
         ...
 
     # Write operations (require web API)

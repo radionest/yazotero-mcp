@@ -20,6 +20,7 @@ if TYPE_CHECKING:
         ZoteroCollectionBase,
         ZoteroItem,
         ZoteroItemIterator,
+        ZoteroSearchParams,
     )
 
 
@@ -335,6 +336,15 @@ class ZoteroClientRouter(ZoteroClientProtocol):
         except Exception:
             if self._local_client and self._web_client:
                 return await self._web_client.get_collection_items_list(collection_key)
+            raise
+
+    async def search_items(self, search_params: "ZoteroSearchParams") -> list["ZoteroItem"]:
+        """Search items across library (read operation with fallback)."""
+        try:
+            return await self.read_client.search_items(search_params)
+        except Exception:
+            if self._local_client and self._web_client:
+                return await self._web_client.search_items(search_params)
             raise
 
     # Write operations - always use write_client (web)
