@@ -30,23 +30,27 @@ class NoteManager:
     ) -> Note:
         """Create a new note for an item."""
         # Convert dict to string if needed
+        is_html = False
         match content:
             case dict():
                 content_str = format_dict_to_html(content)
+                is_html = True
             case str():
                 # Try to parse as JSON and convert to dict
                 try:
                     content_dict = json.loads(content)
                     content_str = format_dict_to_html(content_dict)
+                    is_html = True
                 except (json.JSONDecodeError, ValueError):
                     content_str = content
             case _:
                 content_str = str(content)
 
+        note_html = content_str if is_html else format_note_html(content_str)
         note_item = ItemCreate(
             item_type="note",
             parent_item=item_key,
-            note=format_note_html(content_str),
+            note=note_html,
             tags=[ZoteroTag(tag=tag, type=1) for tag in (tags or [])],
         )
 

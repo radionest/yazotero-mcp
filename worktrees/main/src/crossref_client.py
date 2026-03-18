@@ -155,7 +155,7 @@ class CrossrefClient:
 
     def __init__(self) -> None:
         """Initialize Crossref client."""
-        self.client = httpx.Client(timeout=self.TIMEOUT)
+        self.client = httpx.AsyncClient(timeout=self.TIMEOUT)
 
     async def get_metadata_by_doi(self, doi: str) -> CrossrefWork:
         """Fetch bibliographic metadata from Crossref API using DOI.
@@ -182,7 +182,7 @@ class CrossrefClient:
         url = f"{self.BASE_URL}/{doi}"
 
         try:
-            response = self.client.get(url)
+            response = await self.client.get(url)
             response.raise_for_status()
             data = response.json()
 
@@ -279,11 +279,6 @@ class CrossrefClient:
             "posted-content": "preprint",
         }
         return type_mapping.get(crossref_type, "journalArticle")
-
-    def __del__(self) -> None:
-        """Clean up HTTP client."""
-        if hasattr(self, "client"):
-            self.client.close()
 
 
 # Module-level singleton

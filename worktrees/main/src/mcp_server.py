@@ -93,6 +93,7 @@ mcp: FastMCP = FastMCP(
 """,
 )
 
+
 @mcp.tool
 async def get_collection_items(
     collection_key: str,
@@ -253,6 +254,22 @@ async def search_articles(
             raise ZoteroNotFoundError("collection", collection_key)
         all_items = collection.items.all()
         filtered_items = all_items
+        if search_params.q:
+            q_lower = search_params.q.lower()
+            filtered_items = [
+                item
+                for item in filtered_items
+                if q_lower in item.title.lower()
+                or any(
+                    q_lower in (c.last_name or "").lower()
+                    or q_lower in (c.first_name or "").lower()
+                    for c in item.data.creators
+                )
+            ]
+        if search_params.item_type:
+            filtered_items = [
+                item for item in filtered_items if item.item_type == search_params.item_type
+            ]
     else:
         # Search across entire library using search_items method
         filtered_items = await _zotero_client.search_items(search_params)
