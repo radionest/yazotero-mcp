@@ -116,15 +116,9 @@ chore: обновить зависимости проекта
    ```bash
    git commit -m "$(cat <<'EOF'
    type(scope): краткое описание
-<<<<<<< HEAD
 
    Детальное описание при необходимости
 
-=======
-
-   Детальное описание при необходимости
-
->>>>>>> ed7107b (Initial project setup with gitignore and README)
    Closes #123
    EOF
    )"
@@ -210,8 +204,4 @@ GIT_PATTERNS = [
     r"git\s+commit",
     r"зафиксировать.*изменения"
 ]
-<<<<<<< HEAD
 ```
-=======
-```
->>>>>>> ed7107b (Initial project setup with gitignore and README)
