@@ -1,0 +1,49 @@
+name: Zotero Compatibility Check
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"  # Every Monday at 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check-prefs-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone Zotero repo (shallow)
+        run: git clone --depth 1 https://github.com/zotero/zotero /tmp/zotero-src
+
+      - name: Check preference keys still exist
+        run: |
+          KEYS=(
+            "extensions.zotero.httpServer.enabled"
+            "extensions.zotero.httpServer.port"
+            "extensions.zotero.startup.checkForUpdates"
+          )
+
+          FAILED=0
+          for key in "${KEYS[@]}"; do
+            if grep -rq "$key" /tmp/zotero-src; then
+              echo "OK: $key found in Zotero source"
+            else
+              echo "WARNING: $key NOT found in Zotero source"
+              FAILED=1
+            fi
+          done
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "Some Zotero preference keys may have been renamed or removed."
+            echo "Review tests/zotero_instance.py PREF_* constants."
+            exit 1
+          fi
+
+      - name: Check local API port default
+        run: |
+          if grep -rq "23119" /tmp/zotero-src; then
+            echo "OK: Default port 23119 still referenced in Zotero source"
+          else
+            echo "WARNING: Port 23119 not found - default may have changed"
+            exit 1
+          fi

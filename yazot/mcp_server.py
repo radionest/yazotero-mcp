@@ -1,0 +1,561 @@
+import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any
+
+from fastmcp import Context, FastMCP
+
+from .chunker import ResponseChunker, TextChunker
+from .client_router import ZoteroClientRouter
+from .config import Settings
+from .crossref_client import CrossrefClient
+from .exceptions import ZoteroError, ZoteroNotFoundError
+from .models import (
+    CollectionCreate,
+    FulltextResponse,
+    Note,
+    SearchCollectionResponse,
+    ZoteroCollectionBase,
+    ZoteroItem,
+    ZoteroSearchParams,
+    ZoteroTag,
+)
+from .note_manager import NoteManager
+
+
+def _deps(ctx: Context) -> dict[str, Any]:
+    """Get lifespan dependencies from request context."""
+    result: dict[str, Any] = ctx.request_context.lifespan_context
+    return result
+
+
+@asynccontextmanager
+async def app_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+    """Initialize all dependencies at server start, clean up on shutdown."""
+    settings = Settings()
+    router = ZoteroClientRouter(settings)
+    crossref = CrossrefClient()
+    chunker = ResponseChunker(max_tokens=settings.max_chunk_size)
+    text_chunker = TextChunker(max_tokens=settings.max_chunk_size)
+    note_manager = NoteManager(router)
+
+    try:
+        yield {
+            "settings": settings,
+            "router": router,
+            "crossref": crossref,
+            "chunker": chunker,
+            "text_chunker": text_chunker,
+            "note_manager": note_manager,
+        }
+    finally:
+        await crossref.aclose()
+
+
+# Create FastMCP server with error masking for security
+# Custom exceptions (ToolError subclasses) will still show details to clients
+mcp: FastMCP = FastMCP(
+    "zotero-mcp",
+    lifespan=app_lifespan,
+    mask_error_details=True,
+    instructions="""
+## Zotero MCP Endpoints
+
+### Search Operations
+- `search_articles(query, tags, collection_key, item_type)`: Search with flexible filters
+  - Returns items with abstracts/metadata
+  - Supports chunking (check `has_more`, use `get_next_chunk`)
+- `get_collection_items(collection_key, include_subcollections)`: Get items from collection
+  - Set `include_subcollections=True` for recursive retrieval
+  - Handles chunked responses
+
+### Fulltext Access
+- `get_item_fulltext(item_key)`: Get PDF text (tries indexed API, falls back to direct parsing)
+  - Returns chunked text (use `get_next_fulltext_chunk` if `has_more=True`)
+- `get_next_fulltext_chunk(chunk_id)`: Continue retrieving text chunks
+
+### Notes
+- `create_note_for_item(item_key, title, content, tags)`: Create note attached to item
+  - `content` can be string or dict (auto-formatted)
+- `get_item_notes(item_key)`: Get all notes for item
+
+### Library Management
+- `add_item_by_doi(doi, collection_key, tags)`: Fetch from Crossref and create item
+- `create_collection(name, parent_collection_key)`: Create collection/subcollection
+
+### Chunking Control
+- `get_next_chunk(chunk_id)`: Get next batch of search results
+  - Always check `has_more` in responses
+  - Continue until `has_more=False`
+
+### Resources
+- `resource://collections`: List all available collections with their keys and names
+  - Use to discover collection_key values for search operations
+
+## Typical Workflows
+
+**Get list of items from Collection with given name**
+1. List all collections with resource://collections
+2. Find collection with given name and get its key
+3. If several collections with same name were found ask user which collection to use
+3. Use tool get_collection_items with this key
+
+**Search and read articles:**
+1. `search_articles(query="machine learning")` or `get_collection_items(collection_key="ABC123")`
+2. If `has_more=True`, call `get_next_chunk(chunk_id)` repeatedly
+3. For specific item, call `get_item_fulltext(item_key)`
+4. If fulltext `has_more=True`, call `get_next_fulltext_chunk(chunk_id)` repeatedly
+
+**Add article by DOI:**
+1. `add_item_by_doi(doi="10.1234/example", collection_key="ABC123", tags=["important"])`
+2. Metadata auto-fetched from Crossref
+
+**Create notes:**
+1. Find item using search or get_collection_items tool
+2. `create_note_for_item(item_key, title, content, tags)`
+3. Review with `get_item_notes(item_key)`
+
+**Important:** Always handle chunked responses completely before proceeding to next operation.
+""",
+)
+
+
+@mcp.tool
+async def get_collection_items(
+    collection_key: str,
+    ctx: Context,
+    include_subcollections: bool = False,
+) -> SearchCollectionResponse:
+    """
+    Search and evaluate items in a specific collection.
+    Returns items with abstracts and metadata for assessment.
+
+    Args:
+        collection_key: The collection key to retrieve items from
+        include_subcollections: If True, recursively include items from all subcollections (default: False)
+
+    Returns:
+        SearchCollectionResponse with items from the collection
+
+    Note:
+        To get full text content for an item, use the separate 'get_item_fulltext' tool.
+
+    IMPORTANT CHUNKING BEHAVIOR:
+    - If response contains 'has_more=True', there are more results available
+    - You MUST call 'get_next_chunk' tool with the provided 'chunk_id' to retrieve remaining data
+    - Continue calling 'get_next_chunk' until 'has_more=False'
+    - The 'current_chunk' and 'total_chunks' fields show progress (e.g., current_chunk=1, total_chunks=3)
+    - The 'message' field provides specific instructions for retrieving next chunk
+    """
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+    chunker: ResponseChunker = _deps(ctx)["chunker"]
+
+    collection = await router.get_collection(key=collection_key)
+    if not collection:
+        raise ZoteroNotFoundError("collection", collection_key)
+
+    async def collect_items_recursive(coll: ZoteroCollectionBase) -> list[ZoteroItem]:
+        items = await coll.get_items()
+        if include_subcollections:
+            for subcoll in await coll.get_subcollections():
+                items.extend(await collect_items_recursive(subcoll))
+        return items
+
+    # Collect items (with or without subcollections)
+    filtered_items = await collect_items_recursive(collection)
+
+    # Remove duplicates by key (items can appear in multiple collections)
+    seen_keys = set()
+    unique_items = []
+    for item in filtered_items:
+        if item.key not in seen_keys:
+            seen_keys.add(item.key)
+            unique_items.append(item)
+
+    filtered_items = unique_items
+    await ctx.debug("\n".join([str(i) for i in filtered_items]))
+
+    return chunker.build_chunked_response(filtered_items, len(filtered_items))
+
+
+@mcp.tool
+async def get_next_chunk(chunk_id: str, ctx: Context) -> SearchCollectionResponse:
+    """
+    Get next chunk of search results.
+
+    Use this tool when 'search_collection' returns 'has_more=True'.
+    Pass the 'chunk_id' from the previous response to retrieve the next batch of items.
+    Continue calling until 'has_more=False' to get all results.
+
+    Raises:
+        ZoteroNotFoundError: If chunk_id is invalid or expired
+    """
+    chunker: ResponseChunker = _deps(ctx)["chunker"]
+    chunk_response = chunker.get_next_chunk(chunk_id)
+
+    message = None
+    if chunk_response.has_more:
+        message = (
+            f"⚠️ More results available ({chunk_response.chunk_info}). "
+            f"Call: get_next_chunk(chunk_id='{chunk_response.chunk_id}')"
+        )
+    else:
+        message = f"✓ All results retrieved ({chunk_response.chunk_info})."
+
+    return SearchCollectionResponse(
+        items=chunk_response.items,
+        count=len(chunk_response.items),
+        has_more=chunk_response.has_more,
+        chunk_id=chunk_response.chunk_id,
+        current_chunk=chunk_response.current_chunk,
+        total_chunks=chunk_response.total_chunks,
+        message=message,
+    )
+
+
+@mcp.tool
+async def search_articles(
+    search_params: ZoteroSearchParams,
+    ctx: Context,
+    collection_key: str | None = None,
+) -> SearchCollectionResponse:
+    """
+    Search for articles by name, tags, collections, or item type.
+
+    Supports flexible searching across your Zotero library with multiple filter options.
+
+    Args:
+        query: Quick search string to match against titles and creators (optional)
+        tags: List of tags to filter by - items must have ALL listed tags (optional)
+        collection_key: Filter by specific collection key (optional)
+        item_type: Filter by item type (e.g., 'journalArticle', 'book', 'conferencePaper') (optional)
+
+    Returns:
+        SearchCollectionResponse with matching items
+
+    Note:
+        To get full text content for an item, use the separate 'get_item_fulltext' tool.
+
+    IMPORTANT CHUNKING BEHAVIOR:
+    - If response contains 'has_more=True', there are more results available
+    - You MUST call 'get_next_chunk' tool with the provided 'chunk_id' to retrieve remaining data
+    - Continue calling 'get_next_chunk' until 'has_more=False'
+    - The 'current_chunk' and 'total_chunks' fields show progress
+    - The 'message' field provides specific instructions for retrieving next chunk
+
+    Examples:
+        # Search by title/creator
+        search_articles(query="machine learning")
+
+        # Filter by tags (AND logic)
+        search_articles(tags=["important", "to-read"])
+
+        # Search within collection
+        search_articles(collection_key="ABC123XYZ")
+
+        # Combine filters
+        search_articles(query="neural networks", tags=["AI"], item_type="journalArticle")
+    """
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+    chunker: ResponseChunker = _deps(ctx)["chunker"]
+
+    # Execute search using router (implements protocol with fallback)
+    if collection_key:
+        # Server-side search within collection via Zotero API
+        filtered_items = await router.search_collection_items(collection_key, search_params)
+    else:
+        # Search across entire library using search_items method
+        filtered_items = await router.search_items(search_params)
+
+    # Manual tag filtering if needed (pyzotero may not support all tag logic)
+    if search_params.tag:
+        tag_filter = (
+            [search_params.tag] if isinstance(search_params.tag, str) else search_params.tag
+        )
+        filtered_items = [
+            item for item in filtered_items if all(t in item.tags for t in tag_filter)
+        ]
+
+    return chunker.build_chunked_response(filtered_items, len(filtered_items))
+
+
+@mcp.tool
+async def create_note_for_item(
+    item_key: str,
+    title: str,
+    content: str | dict[str, Any],
+    ctx: Context,
+    tags: list[str] | None = None,
+) -> Note:
+    """
+    Create a new note for a Zotero item/article.
+
+    Args:
+        item_key: The Zotero item key to attach the note to
+        title: Title of the note
+        content: Note content - can be plain text string or structured dict
+        tags: Optional list of tags to apply to the note
+
+    Returns:
+        Note object with key, content, timestamps, and tags
+    """
+    note_manager: NoteManager = _deps(ctx)["note_manager"]
+
+    # Format content if it's a dict
+    if isinstance(content, dict):
+        formatted_content = f"# {title}\n\n{json.dumps(content, indent=2)}"
+    else:
+        formatted_content = f"# {title}\n\n{content}"
+
+    note = await note_manager.create_note(item_key=item_key, content=formatted_content, tags=tags)
+
+    return note
+
+
+@mcp.tool
+async def get_item_notes(item_key: str, ctx: Context) -> list[Note]:
+    """
+    Get all notes for a specific Zotero item/article.
+
+    Retrieves all notes attached to the specified item, including their content,
+    timestamps, and tags.
+
+    Args:
+        item_key: The Zotero item key to retrieve notes from
+
+    Returns:
+        List of Note objects with key, content, timestamps, and tags
+
+    Note:
+        This endpoint uses the web API as local Zotero API does not yet support
+        retrieving notes. Make sure web API credentials are configured.
+
+    Example:
+        # Get all notes for an article
+        notes = get_item_notes("ABC123XYZ")
+        for note in notes:
+            print(f"{note.key}: {note.content[:100]}")
+    """
+    note_manager: NoteManager = _deps(ctx)["note_manager"]
+    notes = await note_manager.get_notes_for_item(item_key=item_key)
+    return notes
+
+
+@mcp.tool
+async def create_collection(
+    name: str, ctx: Context, parent_collection_key: str | None = None
+) -> dict[str, Any]:
+    """
+    Create a new collection in Zotero library.
+
+    Collections are used to organize items in your library. You can create
+    top-level collections or nested subcollections by specifying a parent.
+
+    Args:
+        name: Name of the new collection
+        parent_collection_key: Optional parent collection key for creating subcollections
+
+    Returns:
+        Dictionary with collection details including key, name, and version
+
+    Note:
+        This operation requires web API access with write permissions.
+        Make sure ZOTERO_API_KEY is configured with write access.
+
+    Examples:
+        # Create a top-level collection
+        create_collection(name="Machine Learning Papers")
+
+        # Create a subcollection
+        parent = create_collection(name="AI Research")
+        create_collection(name="Neural Networks", parent_collection_key=parent["key"])
+    """
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+
+    collection_data = CollectionCreate(name=name, parent_collection=parent_collection_key)
+
+    created_collections = await router.create_collections([collection_data])
+
+    if not created_collections:
+        raise ZoteroError("Failed to create collection")
+
+    created = created_collections[0]
+    return {
+        "key": created.key,
+        "name": created.name,
+        "version": created.version,
+        "parent_collection": parent_collection_key,
+    }
+
+
+@mcp.tool
+async def add_item_by_doi(
+    doi: str,
+    ctx: Context,
+    collection_key: str | None = None,
+    tags: list[str] | None = None,
+) -> ZoteroItem:
+    """
+    Add a new item to Zotero library by DOI (Digital Object Identifier).
+
+    This tool automatically fetches bibliographic metadata from Crossref API
+    using the provided DOI, converts it to Zotero format, and creates the item
+    in your library. Optionally adds the item to a collection and applies tags.
+
+    Args:
+        doi: Digital Object Identifier (e.g., "10.1234/example" or "https://doi.org/10.1234/example")
+        collection_key: Optional collection key to add the item to after creation
+        tags: Optional list of tags to apply to the item
+
+    Returns:
+        ZoteroItem object with the created item details
+    """
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+    crossref: CrossrefClient = _deps(ctx)["crossref"]
+
+    crossref_metadata = await crossref.get_metadata_by_doi(doi)
+    item_create = crossref.crossref_to_zotero(crossref_metadata)
+
+    if tags:
+        item_create.tags = [ZoteroTag(tag=tag) for tag in tags]
+
+    if collection_key:
+        item_create.collections = [collection_key]
+
+    created_items = await router.create_items([item_create])
+
+    if not created_items:
+        raise ZoteroError("Failed to create item from DOI")
+
+    return created_items[0]
+
+
+@mcp.tool
+async def get_item_fulltext(item_key: str, ctx: Context) -> FulltextResponse:
+    """
+    Get full text content for a Zotero item (e.g., from PDF attachment).
+
+    Returns the text content with automatic chunking if the text is too large
+    to fit in a single response.
+
+    This tool uses a two-tier approach for maximum reliability:
+    1. First tries Zotero's pre-indexed fulltext API (fast)
+    2. If unavailable, automatically downloads and parses PDF directly (fallback)
+
+    Args:
+        item_key: The Zotero item key to get fulltext for
+
+    Returns:
+        FulltextResponse with text content (potentially chunked)
+
+    IMPORTANT CHUNKING BEHAVIOR:
+    - If response contains 'has_more=True', there are more text chunks available
+    - You MUST call 'get_next_fulltext_chunk' tool with the provided 'chunk_id'
+    - Continue calling until 'has_more=False' to get the complete text
+    - The 'current_chunk' and 'total_chunks' fields show progress
+    - Text is intelligently split by paragraphs and sentences for readability
+    """
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+    text_chunker: TextChunker = _deps(ctx)["text_chunker"]
+
+    fulltext = await router.get_fulltext(item_key)
+
+    if not fulltext:
+        fulltext = await router.get_pdf_text(item_key)
+
+    if not fulltext:
+        return FulltextResponse(
+            item_key=item_key,
+            content="",
+            error="No fulltext available for this item",
+        )
+
+    if not text_chunker.needs_chunking(fulltext):
+        return FulltextResponse(
+            item_key=item_key,
+            content=fulltext,
+        )
+
+    chunk_data = text_chunker.chunk_text(fulltext, item_key)
+
+    message = None
+    if chunk_data.has_more:
+        message = (
+            f"⚠️ Fulltext chunked ({chunk_data.chunk_info}). "
+            f"To get remaining text, call: "
+            f"get_next_fulltext_chunk(chunk_id='{chunk_data.chunk_id}')"
+        )
+
+    return FulltextResponse(
+        item_key=chunk_data.item_key,
+        content=chunk_data.content,
+        has_more=chunk_data.has_more,
+        chunk_id=chunk_data.chunk_id,
+        current_chunk=chunk_data.current_chunk,
+        total_chunks=chunk_data.total_chunks,
+        message=message,
+    )
+
+
+@mcp.tool
+async def get_next_fulltext_chunk(chunk_id: str, ctx: Context) -> FulltextResponse:
+    """
+    Get next chunk of fulltext content.
+
+    Use this tool when 'get_item_fulltext' returns 'has_more=True'.
+    Pass the 'chunk_id' from the previous response to retrieve the next part.
+    Continue calling until 'has_more=False' to get all text.
+
+    Args:
+        chunk_id: The chunk ID from previous fulltext response
+
+    Returns:
+        FulltextResponse with next chunk of text
+
+    Raises:
+        ZoteroNotFoundError: If chunk_id is invalid or expired
+    """
+    text_chunker: TextChunker = _deps(ctx)["text_chunker"]
+    chunk_data = text_chunker.get_next_text_chunk(chunk_id)
+
+    message = None
+    if chunk_data.has_more:
+        message = (
+            f"⚠️ More text available ({chunk_data.chunk_info}). "
+            f"Call: get_next_fulltext_chunk(chunk_id='{chunk_data.chunk_id}')"
+        )
+    elif chunk_data.current_chunk and chunk_data.total_chunks:
+        message = f"✓ All text retrieved ({chunk_data.chunk_info})."
+
+    return FulltextResponse(
+        item_key=chunk_data.item_key,
+        content=chunk_data.content,
+        has_more=chunk_data.has_more,
+        chunk_id=chunk_data.chunk_id,
+        current_chunk=chunk_data.current_chunk,
+        total_chunks=chunk_data.total_chunks,
+        message=message,
+    )
+
+
+@mcp.resource("resource://collections")
+async def list_collections(ctx: Context) -> str:
+    """List available Zotero collections."""
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+    collections = await router.get_collections()
+
+    if not collections:
+        return "No collections found in library"
+
+    result = "Available Collections:\n\n"
+    for coll in collections:
+        parent_info = ""
+        if coll.parent_collection:
+            parent_info = f", parent: {coll.parent_collection}"
+        result += f"- {coll.name} (key: {coll.key}, items: {coll.num_items}{parent_info})\n"
+
+    return result
+
+
+if __name__ == "__main__":
+    mcp.run()
