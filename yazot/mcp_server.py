@@ -87,7 +87,8 @@ mcp: FastMCP = FastMCP(
   - Adds 'verified' tag if all quotes found, 'unverified' otherwise
 
 ### Library Management
-- `add_item_by_doi(doi, collection_key, tags)`: Fetch from Crossref and create item
+- `add_item_by_doi(doi, collection_key, tags)`: Fetch from Crossref and create NEW item
+- `add_items_to_collection(collection_key, item_keys)`: Add existing items to a collection (no duplicates)
 - `create_collection(name, parent_collection_key)`: Create collection/subcollection
 
 ### Chunking Control
@@ -113,7 +114,12 @@ mcp: FastMCP = FastMCP(
 3. For specific item, call `get_item_fulltext(item_key)`
 4. If fulltext `has_more=True`, call `get_next_fulltext_chunk(chunk_id)` repeatedly
 
-**Add article by DOI:**
+**Add/move articles to collection:**
+1. Search for articles using `search_articles` or `get_collection_items`
+2. Use `add_items_to_collection(collection_key, item_keys)` to add found items
+3. Use `add_item_by_doi` ONLY for articles not yet in your library
+
+**Import new article by DOI:**
 1. `add_item_by_doi(doi="10.1234/example", collection_key="ABC123", tags=["important"])`
 2. Metadata auto-fetched from Crossref
 
@@ -436,6 +442,35 @@ async def add_item_by_doi(
         raise ZoteroError("Failed to create item from DOI")
 
     return created_items[0]
+
+
+@mcp.tool
+async def add_items_to_collection(
+    collection_key: str,
+    item_keys: list[str],
+    ctx: Context,
+) -> str:
+    """
+    Add existing Zotero items to a collection.
+
+    Use this tool to organize items that are already in your library into collections.
+    This does NOT create duplicates — it adds references to existing items.
+
+    For importing new articles not yet in your library, use add_item_by_doi instead.
+
+    Args:
+        collection_key: Target collection key (use resource://collections to find keys)
+        item_keys: List of item keys to add to the collection
+
+    Returns:
+        Confirmation message with the number of items added
+    """
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+
+    items = [await router.get_item(key) for key in item_keys]
+    await router.add_to_collection(collection_key, items)
+
+    return f"Added {len(items)} item(s) to collection {collection_key}"
 
 
 @mcp.tool
