@@ -24,6 +24,7 @@ yazot/
 ├── crossref_client.py # Получение метаданных по DOI через Crossref API
 ├── note_manager.py    # CRUD заметок (зависит от ZoteroClientProtocol)
 ├── chunker.py         # ResponseChunker (items) + TextChunker (fulltext)
+├── verifier.py        # NoteVerifier — проверка цитат в заметках против fulltext
 ├── formatters.py      # Конвертация text↔HTML для заметок
 ├── config.py          # Settings (pydantic-settings, .env)
 └── exceptions.py      # Иерархия ошибок на базе ToolError
@@ -43,6 +44,9 @@ yazot/
 ## Development
 
 ```bash
+# Установка dev-зависимостей (обязательно в новом worktree!)
+uv sync --group dev
+
 # Запуск сервера
 uv run python -m yazot.mcp_server
 
@@ -51,7 +55,7 @@ uv run pytest
 uv run pytest tests/test_formatters.py -v     # конкретный файл
 uv run pytest -k "test_search" -v              # по имени
 
-# Линтеры (pre-commit: black, ruff, mypy)
+# Линтеры (pre-commit: black, ruff, mypy) — запускать последовательно, не параллельно
 uv run ruff check yazot/ tests/
 uv run black --check yazot/ tests/
 uv run mypy yazot/
@@ -59,6 +63,8 @@ uv run mypy yazot/
 # Все pre-commit хуки
 pre-commit run --all-files
 ```
+
+**Хуки Claude Code**: PostToolUse на Edit/Write автоматически запускает ruff --fix + black на .py файлах.
 
 ## Environment
 

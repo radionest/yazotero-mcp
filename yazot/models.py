@@ -478,4 +478,4 @@ class ZoteroSearchParams(BaseModel):
 
     def to_api_params(self) -> dict[str, Any]:
         """Convert to dict for pyzotero API calls, excluding None values."""
-        return {k: v for k, v in self.model_dump(by_alias=True, exclude_none=True).items()}
+        return dict(self.model_dump(by_alias=True, exclude_none=True))

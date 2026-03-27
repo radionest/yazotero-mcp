@@ -1,12 +1,11 @@
 """Tests for note verification (extract_quotes, normalize_text, NoteVerifier)."""
 
 from datetime import datetime
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from yazot.models import Note, VerificationResult
+from yazot.models import Note
 from yazot.verifier import NoteVerifier, extract_quotes, normalize_text
 
 
