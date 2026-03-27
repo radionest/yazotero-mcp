@@ -658,3 +658,9 @@ class ZoteroClient(ZoteroClientProtocol):
                     f"'{collection_key}': {type(e).__name__}: {e}. "
                     "Hint: check network connectivity and web API credentials."
                 ) from e
+
+    @webonly
+    async def remove_from_collection(self, collection_key: str, item_key: str) -> None:
+        """Remove item from collection without deleting from library."""
+        raw_item = await _run_sync(self._client.item, item_key)
+        await _run_sync(self._client.deletefrom_collection, collection_key, raw_item)
