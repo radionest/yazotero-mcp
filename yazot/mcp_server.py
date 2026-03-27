@@ -15,12 +15,14 @@ from .models import (
     FulltextResponse,
     Note,
     SearchCollectionResponse,
+    VerificationResult,
     ZoteroCollectionBase,
     ZoteroItem,
     ZoteroSearchParams,
     ZoteroTag,
 )
 from .note_manager import NoteManager
+from .verifier import NoteVerifier
 
 
 def _deps(ctx: Context) -> dict[str, Any]:
@@ -38,6 +40,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     chunker = ResponseChunker(max_tokens=settings.max_chunk_size)
     text_chunker = TextChunker(max_tokens=settings.max_chunk_size)
     note_manager = NoteManager(router)
+    verifier = NoteVerifier(note_manager, router)
 
     try:
         yield {
@@ -47,6 +50,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
             "chunker": chunker,
             "text_chunker": text_chunker,
             "note_manager": note_manager,
+            "verifier": verifier,
         }
     finally:
         await crossref.aclose()
@@ -77,7 +81,10 @@ mcp: FastMCP = FastMCP(
 ### Notes
 - `create_note_for_item(item_key, title, content, tags)`: Create note attached to item
   - `content` can be string or dict (auto-formatted)
+  - Use `> quote text` (markdown blockquotes) for citations from articles
 - `get_item_notes(item_key)`: Get all notes for item
+- `verify_note(note_key)`: Verify that blockquotes in a note exist in the article fulltext
+  - Adds 'verified' tag if all quotes found, 'unverified' otherwise
 
 ### Library Management
 - `add_item_by_doi(doi, collection_key, tags)`: Fetch from Crossref and create item
@@ -110,10 +117,11 @@ mcp: FastMCP = FastMCP(
 1. `add_item_by_doi(doi="10.1234/example", collection_key="ABC123", tags=["important"])`
 2. Metadata auto-fetched from Crossref
 
-**Create notes:**
+**Create and verify notes:**
 1. Find item using search or get_collection_items tool
-2. `create_note_for_item(item_key, title, content, tags)`
-3. Review with `get_item_notes(item_key)`
+2. `create_note_for_item(item_key, title, content)` — use `> quote` for citations
+3. `verify_note(note_key)` — checks quotes against fulltext, adds verified/unverified tag
+4. Review with `get_item_notes(item_key)`
 
 **Important:** Always handle chunked responses completely before proceeding to next operation.
 """,
@@ -536,6 +544,32 @@ async def get_next_fulltext_chunk(chunk_id: str, ctx: Context) -> FulltextRespon
         total_chunks=chunk_data.total_chunks,
         message=message,
     )
+
+
+@mcp.tool
+async def verify_note(note_key: str, ctx: Context) -> VerificationResult:
+    """
+    Verify that quotes in a note actually exist in the parent article's fulltext.
+
+    Extracts all blockquotes (lines starting with '>' in markdown) from the note,
+    then checks each quote against the article's full text using normalized comparison.
+
+    If all quotes are found, adds 'verified' tag to the note.
+    If any quote is missing or fulltext is unavailable, adds 'unverified' tag.
+
+    Args:
+        note_key: The Zotero key of the note to verify
+
+    Returns:
+        VerificationResult with verification status, quote counts, and failed quotes
+
+    Example workflow:
+        1. Create a note with blockquotes:
+           create_note_for_item(item_key, "Analysis", "The authors state:\\n> exact quote from article")
+        2. Verify the quotes: verify_note(note_key)
+    """
+    verifier: NoteVerifier = _deps(ctx)["verifier"]
+    return await verifier.verify(note_key)
 
 
 @mcp.resource("resource://collections")
