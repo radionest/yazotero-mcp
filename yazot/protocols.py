@@ -175,6 +175,10 @@ class ZoteroClientProtocol(Protocol):
         """Add items to a collection."""
         ...
 
+    async def attach_pdf(self, item_key: str, filepath: str) -> None:
+        """Attach a PDF file to a Zotero item."""
+        ...
+
     async def remove_from_collection(self, collection_key: str, item_key: str) -> None:
         """Remove item from collection without deleting from library."""
         ...

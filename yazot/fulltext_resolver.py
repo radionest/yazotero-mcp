@@ -1,16 +1,15 @@
 """External fulltext resolver — cascading PDF retrieval from open-access sources."""
 
-import io
 import logging
 from urllib.parse import quote
 
 import httpx
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
-from pypdf import PdfReader
 
 from .config import Settings
 from .exceptions import FulltextDownloadError, FulltextNotFoundError, FulltextSourceError
+from .pdf_utils import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -241,15 +240,9 @@ class FulltextResolver:
     def extract_text(self, pdf_bytes: bytes) -> str:
         """Extract text from PDF bytes using pypdf."""
         try:
-            reader = PdfReader(io.BytesIO(pdf_bytes))
-        except Exception as e:
-            raise FulltextDownloadError("pdf", f"Failed to parse PDF: {e}") from e
-        text_parts = []
-        for page in reader.pages:
-            text = page.extract_text()
-            if text:
-                text_parts.append(text)
-        return "\n\n".join(text_parts)
+            return extract_text_from_pdf(pdf_bytes)
+        except ValueError as e:
+            raise FulltextDownloadError("pdf", str(e)) from e
 
     async def aclose(self) -> None:
         await self._http.aclose()

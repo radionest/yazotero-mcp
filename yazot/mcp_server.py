@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -750,16 +749,11 @@ async def _attach_pdf_to_item(ctx: Context, item_key: str, pdf_bytes: bytes) -> 
     """Attempt to attach PDF to a Zotero item. Returns True if successful."""
     router: ZoteroClientRouter = _deps(ctx)["router"]
     try:
-        write_client = router.write_client
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(pdf_bytes)
             tmp_path = f.name
         try:
-            await asyncio.to_thread(
-                write_client._client.attachment_simple,
-                [tmp_path],
-                item_key,
-            )
+            await router.attach_pdf(item_key, tmp_path)
             return True
         finally:
             os.unlink(tmp_path)

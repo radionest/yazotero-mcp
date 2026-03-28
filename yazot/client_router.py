@@ -325,6 +325,10 @@ class ZoteroClientRouter(ZoteroClientProtocol):
         """Add items to collection (write operation - web only)."""
         await self.write_client.add_to_collection(collection_key, items)
 
+    async def attach_pdf(self, item_key: str, filepath: str) -> None:
+        """Attach PDF to item (write operation - web only)."""
+        await self.write_client.attach_pdf(item_key, filepath)
+
     async def remove_from_collection(self, collection_key: str, item_key: str) -> None:
         """Remove item from collection (write operation - web only)."""
         await self.write_client.remove_from_collection(collection_key, item_key)
