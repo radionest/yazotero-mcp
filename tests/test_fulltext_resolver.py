@@ -443,13 +443,15 @@ class TestFulltextResolver:
         assert text == "Page 1 text"
 
     def test_extract_text_pdf_parse_failure(self, settings_all: Settings) -> None:
+        from pypdf.errors import PdfReadError
+
         resolver = FulltextResolver(settings_all)
         pdf_bytes = make_pdf_bytes()
 
         with (
             patch(
                 "yazot.pdf_utils.PdfReader",
-                side_effect=ValueError("corrupt"),
+                side_effect=PdfReadError("corrupt"),
             ),
             pytest.raises(FulltextDownloadError, match="Failed to parse PDF"),
         ):

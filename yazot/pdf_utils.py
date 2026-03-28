@@ -3,6 +3,7 @@
 import io
 
 from pypdf import PdfReader
+from pypdf.errors import PdfReadError, PdfStreamError
 
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
@@ -13,14 +14,15 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
 
     Returns:
         Extracted text with pages joined by double newlines.
-        Empty string if no text could be extracted.
+        Returns empty string if PDF contains no extractable text (e.g. scanned images).
+        Callers should check for empty result and handle accordingly.
 
     Raises:
-        ValueError: If pdf_bytes cannot be parsed as a valid PDF
+        ValueError: If pdf_bytes cannot be parsed as a valid PDF (corrupt, empty, wrong format)
     """
     try:
         reader = PdfReader(io.BytesIO(pdf_bytes))
-    except Exception as e:
+    except (PdfReadError, PdfStreamError) as e:
         raise ValueError(f"Failed to parse PDF: {e}") from e
     text_parts = []
     for page in reader.pages:
