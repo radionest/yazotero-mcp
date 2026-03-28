@@ -234,6 +234,17 @@ class FulltextResponse(ChunkInfoMixin):
     error: str | None = None
 
 
+class ExternalFulltextResponse(ChunkInfoMixin):
+    """Response for externally fetched fulltext content."""
+
+    item_key: str | None = None
+    content: str
+    source: str | None = None
+    pdf_attached: bool = False
+    message: str | None = None
+    error: str | None = None
+
+
 class ChunkResponse(ChunkInfoMixin):
     items: list[ZoteroItem]
     error: str | None = None
