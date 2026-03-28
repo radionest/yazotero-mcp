@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
 
 from .chunker import ResponseChunker, TextChunker
 from .client_router import ZoteroClientRouter
@@ -162,7 +163,7 @@ mcp: FastMCP = FastMCP(
 )
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def get_collection_items(
     collection_key: str,
     ctx: Context,
@@ -220,7 +221,7 @@ async def get_collection_items(
     return chunker.build_chunked_response(filtered_items, len(filtered_items))
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def get_next_chunk(chunk_id: str, ctx: Context) -> SearchCollectionResponse:
     """
     Get next chunk of search results.
@@ -255,7 +256,7 @@ async def get_next_chunk(chunk_id: str, ctx: Context) -> SearchCollectionRespons
     )
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def search_articles(
     search_params: ZoteroSearchParams,
     ctx: Context,
@@ -323,7 +324,7 @@ async def search_articles(
     return chunker.build_chunked_response(filtered_items, len(filtered_items))
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def create_note_for_item(
     item_key: str,
     title: str,
@@ -356,7 +357,7 @@ async def create_note_for_item(
     return note
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def get_item_notes(item_key: str, ctx: Context) -> list[Note]:
     """
     Get all notes for a specific Zotero item/article.
@@ -385,7 +386,7 @@ async def get_item_notes(item_key: str, ctx: Context) -> list[Note]:
     return notes
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def create_collection(
     name: str, ctx: Context, parent_collection_key: str | None = None
 ) -> dict[str, Any]:
@@ -432,7 +433,7 @@ async def create_collection(
     }
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=True))
 async def add_item_by_doi(
     doi: str,
     ctx: Context,
@@ -474,7 +475,7 @@ async def add_item_by_doi(
     return created_items[0]
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def add_items_to_collection(
     collection_key: str,
     item_keys: list[str],
@@ -503,7 +504,7 @@ async def add_items_to_collection(
     return f"Added {len(items)} item(s) to collection {collection_key}"
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def get_item_fulltext(item_key: str, ctx: Context) -> FulltextResponse:
     """
     Get full text content for a Zotero item (e.g., from PDF attachment).
@@ -570,7 +571,7 @@ async def get_item_fulltext(item_key: str, ctx: Context) -> FulltextResponse:
     )
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def get_next_fulltext_chunk(chunk_id: str, ctx: Context) -> FulltextResponse:
     """
     Get next chunk of fulltext content.
@@ -611,7 +612,7 @@ async def get_next_fulltext_chunk(chunk_id: str, ctx: Context) -> FulltextRespon
     )
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(idempotentHint=True))
 async def verify_note(note_key: str, ctx: Context) -> VerificationResult:
     """
     Verify that quotes in a note actually exist in the parent article's fulltext.
@@ -637,7 +638,7 @@ async def verify_note(note_key: str, ctx: Context) -> VerificationResult:
     return await verifier.verify(note_key)
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=True))
 async def fetch_external_fulltext(
     ctx: Context,
     item_key: str | None = None,
@@ -758,13 +759,11 @@ async def _attach_pdf_to_item(ctx: Context, item_key: str, pdf_bytes: bytes) -> 
         finally:
             os.unlink(tmp_path)
     except Exception as e:
-        logger.warning(
-            "PDF attachment failed for item %s: %s", item_key, e
-        )
+        logger.warning("PDF attachment failed for item %s: %s", item_key, e)
         return False
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(destructiveHint=True))
 async def remove_item(
     item_key: str,
     ctx: Context,
