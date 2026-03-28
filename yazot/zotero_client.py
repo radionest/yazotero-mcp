@@ -235,12 +235,21 @@ class ZoteroClient(ZoteroClientProtocol):
     async def _find_pdf_attachment_key(self, item_key: str) -> str | None:
         """Find PDF attachment key: check if item itself is PDF, otherwise search children.
 
+        Results are cached to avoid repeated API calls when multiple methods
+        need the same PDF key (e.g. fulltext API → PDF parsing fallback).
+
         Args:
             item_key: Item key (can be parent item or attachment itself)
 
         Returns:
             PDF attachment key, or None if no PDF found
         """
+        cache_key = f"pdf_key:{item_key}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]  # type: ignore[no-any-return]
+
+        result: str | None = None
+
         # Check if item itself is a PDF attachment
         try:
             raw_item = await _run_sync(self._client.item, item_key)
@@ -249,17 +258,20 @@ class ZoteroClient(ZoteroClientProtocol):
                 item_data.get("itemType") == "attachment"
                 and item_data.get("contentType") == "application/pdf"
             ):
-                return item_key
+                result = item_key
         except Exception:
             pass
 
         # Otherwise search children for PDF attachment
-        children = await self.get_children(item_key)
-        for child in children:
-            if child.content_type == "application/pdf":
-                return child.key
+        if result is None:
+            children = await self.get_children(item_key)
+            for child in children:
+                if child.content_type == "application/pdf":
+                    result = child.key
+                    break
 
-        return None
+        self._cache[cache_key] = result
+        return result
 
     async def get_fulltext(self, item_key: str) -> str | None:
         """Get full text content from PDF attachment of an item.
@@ -341,6 +353,55 @@ class ZoteroClient(ZoteroClientProtocol):
             # Transient error (network, PDF parsing) — do NOT cache, allow retry
             logger.warning("Failed to get PDF text for item %s", item_key, exc_info=True)
 
+        return None
+
+    async def get_item_fulltext(self, item_key: str) -> str | None:
+        """Get fulltext for item: try indexed API first, then PDF parsing fallback.
+
+        Finds PDF attachment key once and reuses it for both extraction methods,
+        avoiding duplicate API calls.
+
+        Args:
+            item_key: Item key (parent item or PDF attachment itself)
+
+        Returns:
+            Text content, or None if not available
+        """
+        cache_key = f"item_fulltext:{item_key}"
+        if cache_key in self._cache:
+            cached = self._cache[cache_key]
+            return cached if isinstance(cached, str) else None
+
+        pdf_key = await self._find_pdf_attachment_key(item_key)
+        if not pdf_key:
+            self._cache[cache_key] = None
+            return None
+
+        # 1. Try Zotero's indexed fulltext API (fast)
+        try:
+            fulltext_data = await _run_sync(self._client.fulltext_item, pdf_key)
+            content = fulltext_data.get("content")
+            if content:
+                self._cache[cache_key] = str(content)
+                return str(content)
+        except (zotero_errors.ResourceNotFoundError, KeyError, ValueError):
+            pass
+        except Exception:
+            logger.warning("Failed to get indexed fulltext for %s", item_key, exc_info=True)
+
+        # 2. Fallback: download and parse PDF directly
+        try:
+            pdf_bytes = await _run_sync(self._client.file, pdf_key)
+            text = extract_text_from_pdf(pdf_bytes)
+            if text:
+                self._cache[cache_key] = text
+                return text
+        except (zotero_errors.ResourceNotFoundError, KeyError, ValueError):
+            pass
+        except Exception:
+            logger.warning("Failed to parse PDF for %s", item_key, exc_info=True)
+
+        self._cache[cache_key] = None
         return None
 
     async def get_item(self, item_key: str) -> ZoteroItem:
@@ -673,8 +734,7 @@ class ZoteroClient(ZoteroClientProtocol):
             ) from e
         except Exception as e:
             raise ZoteroError(
-                f"Unexpected error attaching PDF to item '{item_key}': "
-                f"{type(e).__name__}: {e}"
+                f"Unexpected error attaching PDF to item '{item_key}': " f"{type(e).__name__}: {e}"
             ) from e
 
     @webonly

@@ -134,6 +134,7 @@ class TestZoteroClientProtocolImplementation:
             "get_children",
             "get_fulltext",
             "get_pdf_text",
+            "get_item_fulltext",
             "get_items",
             "get_collections",
         ]
