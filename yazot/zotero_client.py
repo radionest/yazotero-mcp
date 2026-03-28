@@ -32,17 +32,31 @@ async def _run_sync[T](func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
 class Collection(ZoteroCollectionBase):
     """Represents a Zotero collection with async item access."""
 
-    def __init__(self, client: zotero.Zotero, data: dict[str, Any]):
+    def __init__(
+        self,
+        client: zotero.Zotero,
+        data: dict[str, Any],
+        semaphore: asyncio.Semaphore | None = None,
+    ):
         """Initialize collection.
 
         Args:
             client: Pyzotero client instance
             data: Collection data from API
+            semaphore: Optional semaphore to limit concurrent API requests
         """
         self._client = client
+        self._semaphore = semaphore
         # Validate incoming data with Pydantic
         self._validated_data = ZoteroCollectionResponse.model_validate(data)
         self._data = data  # Keep raw data for pyzotero compatibility
+
+    async def _call[T](self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """Run sync function with optional semaphore rate limiting."""
+        if self._semaphore is not None:
+            async with self._semaphore:
+                return await _run_sync(func, *args, **kwargs)
+        return await _run_sync(func, *args, **kwargs)
 
     @property
     def key(self) -> str:
@@ -71,19 +85,19 @@ class Collection(ZoteroCollectionBase):
 
     async def get_items(self) -> list[ZoteroItem]:
         """Fetch all items in this collection."""
-        raw_items = await _run_sync(
+        raw_items = await self._call(
             lambda: self._client.everything(self._client.collection_items_top(self.key))
         )
         return [ZoteroItem.model_validate(i) for i in raw_items]
 
     async def get_subcollections(self) -> list[ZoteroCollectionBase]:
         """Fetch subcollections of this collection."""
-        subcoll_data = await _run_sync(self._client.collections_sub, self.key)
-        return [Collection(self._client, data) for data in subcoll_data]
+        subcoll_data = await self._call(self._client.collections_sub, self.key)
+        return [Collection(self._client, data, self._semaphore) for data in subcoll_data]
 
     async def delete(self) -> None:
         """Delete this collection."""
-        await _run_sync(self._client.delete_collection, self._data)
+        await self._call(self._client.delete_collection, self._data)
 
     def __repr__(self) -> str:
         return f"Collection(key={self.key!r}, name={self.name!r})"
@@ -103,11 +117,20 @@ class ZoteroClient(ZoteroClientProtocol):
         if self.settings.zotero_local:
             self._mode = "local"
             self._client = self._init_local_client()
+            self._semaphore: asyncio.Semaphore | None = None
         else:
             self._mode = "web"
             self._client = self._init_web_client()
+            self._semaphore = asyncio.Semaphore(settings.web_zotero_max_concurrent_requests)
 
         self._cache: dict[str, Any] = {}  # Simple in-memory cache
+
+    async def _call[T](self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """Run sync function with optional semaphore rate limiting."""
+        if self._semaphore is not None:
+            async with self._semaphore:
+                return await _run_sync(func, *args, **kwargs)
+        return await _run_sync(func, *args, **kwargs)
 
     @property
     def mode(self) -> str:
@@ -148,13 +171,13 @@ class ZoteroClient(ZoteroClientProtocol):
 
         Returns raw dict — pyzotero returns untyped templates per item type.
         """
-        result: dict[str, Any] = await _run_sync(self._client.item_template, item_type)
+        result: dict[str, Any] = await self._call(self._client.item_template, item_type)
         return result
 
     async def get_items(self) -> list[ZoteroItem]:
         """Fetch all top-level items in library (excludes attachments/notes)."""
         try:
-            raw_items = await _run_sync(lambda: self._client.everything(self._client.top()))
+            raw_items = await self._call(lambda: self._client.everything(self._client.top()))
             return [ZoteroItem.model_validate(i) for i in raw_items]
         except zotero_errors.UserNotAuthorisedError as e:
             raise ZoteroError(
@@ -175,10 +198,10 @@ class ZoteroClient(ZoteroClientProtocol):
     async def get_collections(self) -> list[ZoteroCollectionBase]:
         """Fetch all collections with pagination support."""
         try:
-            colls_data = await _run_sync(
+            colls_data = await self._call(
                 lambda: self._client.everything(self._client.collections())
             )
-            return [Collection(self._client, data) for data in colls_data]
+            return [Collection(self._client, data, self._semaphore) for data in colls_data]
         except zotero_errors.UserNotAuthorisedError as e:
             raise ZoteroError(
                 "Access denied when fetching collections. "
@@ -212,8 +235,8 @@ class ZoteroClient(ZoteroClientProtocol):
         """
         if key is not None:
             try:
-                data = await _run_sync(self._client.collection, key)
-                return Collection(self._client, data)
+                data = await self._call(self._client.collection, key)
+                return Collection(self._client, data, self._semaphore)
             except zotero_errors.ResourceNotFoundError as e:
                 raise ZoteroNotFoundError("collection", key) from e
             except zotero_errors.PyZoteroError as e:
@@ -243,7 +266,7 @@ class ZoteroClient(ZoteroClientProtocol):
         """
         # Check if item itself is a PDF attachment
         try:
-            raw_item = await _run_sync(self._client.item, item_key)
+            raw_item = await self._call(self._client.item, item_key)
             item_data = raw_item.get("data", {})
             if (
                 item_data.get("itemType") == "attachment"
@@ -285,7 +308,7 @@ class ZoteroClient(ZoteroClientProtocol):
                 self._cache[cache_key] = None
                 return None
 
-            fulltext_data = await _run_sync(self._client.fulltext_item, pdf_key)
+            fulltext_data = await self._call(self._client.fulltext_item, pdf_key)
             content = fulltext_data.get("content")
 
             if content:
@@ -326,7 +349,7 @@ class ZoteroClient(ZoteroClientProtocol):
                 self._cache[cache_key] = None
                 return None
 
-            pdf_bytes = await _run_sync(self._client.file, pdf_key)
+            pdf_bytes = await self._call(self._client.file, pdf_key)
             full_text = extract_text_from_pdf(pdf_bytes)
 
             if full_text:
@@ -346,7 +369,7 @@ class ZoteroClient(ZoteroClientProtocol):
     async def get_item(self, item_key: str) -> ZoteroItem:
         """Get single item by key."""
         try:
-            raw_item = await _run_sync(self._client.item, item_key)
+            raw_item = await self._call(self._client.item, item_key)
             return ZoteroItem.model_validate(raw_item)
         except zotero_errors.ResourceNotFoundError as e:
             raise ZoteroNotFoundError("item", item_key) from e
@@ -369,7 +392,7 @@ class ZoteroClient(ZoteroClientProtocol):
     async def get_raw_item(self, item_key: str) -> dict[str, Any]:
         """Get raw item data as dict."""
         try:
-            raw_item: dict[str, Any] = await _run_sync(self._client.item, item_key)
+            raw_item: dict[str, Any] = await self._call(self._client.item, item_key)
             return raw_item
         except zotero_errors.ResourceNotFoundError as e:
             raise ZoteroNotFoundError("item", item_key) from e
@@ -387,19 +410,19 @@ class ZoteroClient(ZoteroClientProtocol):
     @webonly
     async def delete_item(self, item: ZoteroItem) -> None:
         """Delete item using ZoteroItem model."""
-        await _run_sync(self._client.delete_item, item.model_dump(mode="json", by_alias=True))
+        await self._call(self._client.delete_item, item.model_dump(mode="json", by_alias=True))
 
     @webonly
     async def delete_item_by_key(self, item_key: str) -> None:
         """Delete item by key string."""
-        raw_item = await _run_sync(self._client.item, item_key)
-        await _run_sync(self._client.delete_item, raw_item)
+        raw_item = await self._call(self._client.item, item_key)
+        await self._call(self._client.delete_item, raw_item)
 
     @webonly
     async def delete_collection_by_key(self, collection_key: str) -> None:
         """Delete collection by key."""
-        raw_coll = await _run_sync(self._client.collection, collection_key)
-        await _run_sync(self._client.delete_collection, raw_coll)
+        raw_coll = await self._call(self._client.collection, collection_key)
+        await self._call(self._client.delete_collection, raw_coll)
 
     @webonly
     async def create_items(self, items: list[ItemCreate]) -> list[ZoteroItem]:
@@ -411,7 +434,7 @@ class ZoteroClient(ZoteroClientProtocol):
         try:
             items_data = [item.model_dump(exclude_none=True, by_alias=True) for item in items]
             try:
-                raw_response = await _run_sync(self._client.create_items, items_data)
+                raw_response = await self._call(self._client.create_items, items_data)
             except zotero_errors.UserNotAuthorisedError as e:
                 raise ZoteroError(
                     "Not authorized to create items. "
@@ -441,7 +464,7 @@ class ZoteroClient(ZoteroClientProtocol):
     async def get_children(self, item_key: str) -> list[Attachment]:
         """Get child attachments for an item."""
         try:
-            children_data = await _run_sync(self._client.children, item_key)
+            children_data = await self._call(self._client.children, item_key)
             return [
                 Attachment(
                     key=child["key"],
@@ -471,7 +494,7 @@ class ZoteroClient(ZoteroClientProtocol):
         """Update an existing item."""
         try:
             try:
-                item_dict = await _run_sync(self._client.item, item_key)
+                item_dict = await self._call(self._client.item, item_key)
             except zotero_errors.ResourceNotFoundError as e:
                 raise ZoteroNotFoundError("item", item_key) from e
             except zotero_errors.PyZoteroError as e:
@@ -485,7 +508,7 @@ class ZoteroClient(ZoteroClientProtocol):
                 item_dict["data"][key] = value
 
             try:
-                await _run_sync(self._client.update_item, item_dict)
+                await self._call(self._client.update_item, item_dict)
             except zotero_errors.PreConditionFailedError as e:
                 raise ZoteroError(
                     f"Update conflict for item '{item_key}': version mismatch. "
@@ -517,7 +540,7 @@ class ZoteroClient(ZoteroClientProtocol):
         """
         api_params = search_params.to_api_params()
         try:
-            raw_items = await _run_sync(
+            raw_items = await self._call(
                 lambda: self._client.everything(self._client.top(**api_params))
             )
         except zotero_errors.UnsupportedParamsError as e:
@@ -546,7 +569,7 @@ class ZoteroClient(ZoteroClientProtocol):
         """
         api_params = search_params.to_api_params()
         try:
-            raw_items = await _run_sync(
+            raw_items = await self._call(
                 lambda: self._client.everything(
                     self._client.collection_items_top(collection_key, **api_params)
                 )
@@ -585,7 +608,7 @@ class ZoteroClient(ZoteroClientProtocol):
                 {"name": c.name, "parentCollection": c.parent_collection} for c in collections
             ]
             try:
-                raw_response = await _run_sync(self._client.create_collections, collections_data)
+                raw_response = await self._call(self._client.create_collections, collections_data)
             except zotero_errors.UserNotAuthorisedError as e:
                 raise ZoteroError(
                     "Not authorized to create collections. "
@@ -607,7 +630,8 @@ class ZoteroClient(ZoteroClientProtocol):
                 ZoteroCollectionResponse.model_validate(coll) for coll in successful_colls
             ]
             return [
-                Collection(self._client, coll.model_dump(mode="json")) for coll in validated_colls
+                Collection(self._client, coll.model_dump(mode="json"), self._semaphore)
+                for coll in validated_colls
             ]
         except ZoteroError:
             raise
@@ -622,7 +646,7 @@ class ZoteroClient(ZoteroClientProtocol):
         """Add items to a collection."""
         for item in items:
             try:
-                await _run_sync(
+                await self._call(
                     self._client.addto_collection,
                     collection_key,
                     item.model_dump(by_alias=True),
@@ -681,7 +705,7 @@ class ZoteroClient(ZoteroClientProtocol):
     async def remove_from_collection(self, collection_key: str, item_key: str) -> None:
         """Remove item from collection without deleting from library."""
         try:
-            raw_item = await _run_sync(self._client.item, item_key)
+            raw_item = await self._call(self._client.item, item_key)
         except zotero_errors.ResourceNotFoundError as e:
             raise ZoteroNotFoundError("item", item_key) from e
         except zotero_errors.PyZoteroError as e:
@@ -690,7 +714,7 @@ class ZoteroClient(ZoteroClientProtocol):
                 "Hint: verify the item key is correct."
             ) from e
         try:
-            await _run_sync(self._client.deletefrom_collection, collection_key, raw_item)
+            await self._call(self._client.deletefrom_collection, collection_key, raw_item)
         except zotero_errors.ResourceNotFoundError as e:
             raise ZoteroNotFoundError("collection", collection_key) from e
         except zotero_errors.UserNotAuthorisedError as e:

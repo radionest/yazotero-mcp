@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # Max tokens per chunk (estimated as len/4). Claude Code tool result limit is ~10K tokens,
     # so 5000 content tokens + JSON metadata overhead fits safely within that limit.
     max_chunk_size: int = Field(default=5000)
+    # Max parallel requests to Zotero Web API (prevents 429 rate limiting).
+    # Only applies in web mode; local mode has no rate limits.
+    web_zotero_max_concurrent_requests: int = Field(default=5)
 
     # External fulltext retrieval
     unpaywall_email: str | None = Field(default=None)
