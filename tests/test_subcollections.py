@@ -150,21 +150,23 @@ class TestSubcollections:
             )
             response = result.data
 
-        # With small chunk size, chunking should be triggered
-        if response.has_more:
-            assert response.chunk_id
-            assert response.current_chunk is not None
-            assert response.total_chunks is not None
+            # With small chunk size, chunking should be triggered
+            if response.has_more:
+                assert response.chunk_id
+                assert response.current_chunk is not None
+                assert response.total_chunks is not None
 
-            # Collect all chunks
-            all_items = list(response.items)
-            chunk_id = response.chunk_id
-
-            while response.has_more:
-                result = await client.call_tool("get_next_chunk", arguments={"chunk_id": chunk_id})
-                response = result.data
-                all_items.extend(response.items)
+                # Collect all chunks
+                all_items = list(response.items)
                 chunk_id = response.chunk_id
 
-            # Total should match expected
-            assert len(all_items) == expected_total
+                while response.has_more:
+                    result = await client.call_tool(
+                        "get_next_chunk", arguments={"chunk_id": chunk_id}
+                    )
+                    response = result.data
+                    all_items.extend(response.items)
+                    chunk_id = response.chunk_id
+
+                # Total should match expected
+                assert len(all_items) == expected_total
