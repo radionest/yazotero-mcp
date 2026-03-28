@@ -297,7 +297,7 @@ async def search_articles(
         filtered_items = [
             item
             for item in filtered_items
-            if all(t in [tag.tag for tag in item.data.tags] for t in tag_filter)
+            if all(t in {tag.tag for tag in item.data.tags} for t in tag_filter)
         ]
 
     return chunker.build_chunked_response(filtered_items, len(filtered_items))

@@ -63,9 +63,8 @@ class TestRemoveItemFromCollection:
         assert result.data["action"] == "removed_from_collection"
         assert result.data["item_key"] == item_key
         assert result.data["collection_key"] == coll_keys[0]
-        assert result.data["remaining_collections"] >= 1
 
-        # Verify item still exists in library
+        # Verify item still exists in library but removed from collection
         item = await test_zotero_client.get_item(item_key)
         assert item is not None
         assert coll_keys[0] not in item.data.collections

@@ -662,5 +662,32 @@ class ZoteroClient(ZoteroClientProtocol):
     @webonly
     async def remove_from_collection(self, collection_key: str, item_key: str) -> None:
         """Remove item from collection without deleting from library."""
-        raw_item = await _run_sync(self._client.item, item_key)
-        await _run_sync(self._client.deletefrom_collection, collection_key, raw_item)
+        try:
+            raw_item = await _run_sync(self._client.item, item_key)
+        except zotero_errors.ResourceNotFoundError as e:
+            raise ZoteroNotFoundError("item", item_key) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Failed to fetch item '{item_key}' for removal from collection: {e}. "
+                "Hint: verify the item key is correct."
+            ) from e
+        try:
+            await _run_sync(self._client.deletefrom_collection, collection_key, raw_item)
+        except zotero_errors.ResourceNotFoundError as e:
+            raise ZoteroNotFoundError("collection", collection_key) from e
+        except zotero_errors.UserNotAuthorisedError as e:
+            raise ZoteroError(
+                f"Not authorized to modify collection '{collection_key}'. "
+                "Hint: check that ZOTERO_API_KEY has write permissions."
+            ) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Failed to remove item '{item_key}' from collection '{collection_key}': {e}. "
+                "Hint: verify the collection key exists and credentials are correct."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error removing item '{item_key}' from collection "
+                f"'{collection_key}': {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and web API credentials."
+            ) from e
