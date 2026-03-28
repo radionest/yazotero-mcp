@@ -84,6 +84,7 @@ For tests: `.env.test` (auto-loaded via `conftest.py`)
 - All models — Pydantic v2 BaseModel (not dicts)
 - Tests: mocks via `unittest.mock`, fixtures in `conftest.py`, pytest-asyncio (`asyncio_mode="auto"`)
 - All MCP tools and I/O are async
+- Commit messages, PR titles/body, code comments — always in English
 - Errors: custom exceptions from `exceptions.py`, never bare Exception
 - `ZoteroItemData.doi` can be `""` (empty string), not just `None` — normalize via `or None`
 - PDF attachment: `router.attach_pdf(item_key, filepath)` — NOT via `_client` directly
