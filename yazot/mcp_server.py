@@ -90,6 +90,9 @@ mcp: FastMCP = FastMCP(
 - `add_item_by_doi(doi, collection_key, tags)`: Fetch from Crossref and create NEW item
 - `add_items_to_collection(collection_key, item_keys)`: Add existing items to a collection (no duplicates)
 - `create_collection(name, parent_collection_key)`: Create collection/subcollection
+- `remove_item(item_key, collection_key, from_library)`: Smart item removal
+  - With `collection_key`: removes from collection if in multiple, deletes from library if in only one
+  - With `from_library=True`: always deletes from library entirely
 
 ### Chunking Control
 - `get_next_chunk(chunk_id)`: Get next batch of search results
@@ -122,6 +125,11 @@ mcp: FastMCP = FastMCP(
 **Import new article by DOI:**
 1. `add_item_by_doi(doi="10.1234/example", collection_key="ABC123", tags=["important"])`
 2. Metadata auto-fetched from Crossref
+
+**Remove items:**
+1. Find item using search or get_collection_items
+2. `remove_item(item_key="ABC123", collection_key="COL456")` — smart removal
+3. Or `remove_item(item_key="ABC123", from_library=True)` — force delete from library
 
 **Create and verify notes:**
 1. Find item using search or get_collection_items tool
@@ -287,7 +295,9 @@ async def search_articles(
             [search_params.tag] if isinstance(search_params.tag, str) else search_params.tag
         )
         filtered_items = [
-            item for item in filtered_items if all(t in item.tags for t in tag_filter)
+            item
+            for item in filtered_items
+            if all(t in {tag.tag for tag in item.data.tags} for t in tag_filter)
         ]
 
     return chunker.build_chunked_response(filtered_items, len(filtered_items))
@@ -605,6 +615,75 @@ async def verify_note(note_key: str, ctx: Context) -> VerificationResult:
     """
     verifier: NoteVerifier = _deps(ctx)["verifier"]
     return await verifier.verify(note_key)
+
+
+@mcp.tool
+async def remove_item(
+    item_key: str,
+    ctx: Context,
+    collection_key: str | None = None,
+    from_library: bool = False,
+) -> dict[str, Any]:
+    """
+    Remove an item from a collection or delete it from the library entirely.
+
+    Smart behavior when collection_key is provided and from_library is False:
+    - If the item belongs to only one collection, it is deleted from the library entirely
+    - If the item belongs to multiple collections, it is only removed from the specified collection
+
+    Args:
+        item_key: The Zotero item key to remove
+        collection_key: Collection to remove the item from (optional)
+        from_library: If True, force deletion from library regardless of collection membership
+
+    Returns:
+        Dictionary describing the action taken
+
+    Examples:
+        # Smart removal from collection (deletes from library if only in this collection)
+        remove_item(item_key="ABC123", collection_key="COL456")
+
+        # Force delete from library
+        remove_item(item_key="ABC123", from_library=True)
+    """
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+
+    if collection_key is None and not from_library:
+        raise ZoteroError(
+            "Specify collection_key to remove from collection, "
+            "or set from_library=True to delete from library entirely."
+        )
+
+    if from_library:
+        await router.delete_item_by_key(item_key)
+        return {"action": "deleted_from_library", "item_key": item_key}
+
+    # collection_key is guaranteed to be str here (None case handled above)
+    # narrow type for mypy
+    collection_key_str: str = collection_key  # type: ignore[assignment]
+
+    item = await router.get_item(item_key)
+
+    if collection_key_str not in item.data.collections:
+        raise ZoteroNotFoundError(
+            "item in collection",
+            f"item {item_key} is not in collection {collection_key_str}",
+        )
+
+    if len(item.data.collections) <= 1:
+        await router.delete_item(item)
+        return {
+            "action": "deleted_from_library",
+            "item_key": item_key,
+            "reason": "item was only in this collection",
+        }
+
+    await router.remove_from_collection(collection_key_str, item_key)
+    return {
+        "action": "removed_from_collection",
+        "item_key": item_key,
+        "collection_key": collection_key_str,
+    }
 
 
 @mcp.resource("resource://collections")

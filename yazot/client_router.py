@@ -324,3 +324,7 @@ class ZoteroClientRouter(ZoteroClientProtocol):
     async def add_to_collection(self, collection_key: str, items: list["ZoteroItem"]) -> None:
         """Add items to collection (write operation - web only)."""
         await self.write_client.add_to_collection(collection_key, items)
+
+    async def remove_from_collection(self, collection_key: str, item_key: str) -> None:
+        """Remove item from collection (write operation - web only)."""
+        await self.write_client.remove_from_collection(collection_key, item_key)
