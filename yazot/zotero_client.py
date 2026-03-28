@@ -6,7 +6,7 @@ from typing import Any, overload
 from pyzotero import zotero, zotero_errors
 
 from . import config
-from .exceptions import ConfigurationError, ZoteroWriteError
+from .exceptions import ConfigurationError, ZoteroError, ZoteroNotFoundError, ZoteroWriteError
 from .models import (
     Attachment,
     CollectionCreate,
@@ -152,13 +152,47 @@ class ZoteroClient(ZoteroClientProtocol):
 
     async def get_items(self) -> list[ZoteroItem]:
         """Fetch all top-level items in library (excludes attachments/notes)."""
-        raw_items = await _run_sync(lambda: self._client.everything(self._client.top()))
-        return [ZoteroItem.model_validate(i) for i in raw_items]
+        try:
+            raw_items = await _run_sync(lambda: self._client.everything(self._client.top()))
+            return [ZoteroItem.model_validate(i) for i in raw_items]
+        except zotero_errors.UserNotAuthorisedError as e:
+            raise ZoteroError(
+                "Access denied when fetching items. "
+                "Hint: check that ZOTERO_API_KEY has read permissions."
+            ) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Zotero API error when fetching items: {e}. "
+                "Hint: verify Zotero is running and accessible."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error fetching items: {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and Zotero availability."
+            ) from e
 
     async def get_collections(self) -> list[ZoteroCollectionBase]:
         """Fetch all collections with pagination support."""
-        colls_data = await _run_sync(lambda: self._client.everything(self._client.collections()))
-        return [Collection(self._client, data) for data in colls_data]
+        try:
+            colls_data = await _run_sync(
+                lambda: self._client.everything(self._client.collections())
+            )
+            return [Collection(self._client, data) for data in colls_data]
+        except zotero_errors.UserNotAuthorisedError as e:
+            raise ZoteroError(
+                "Access denied when fetching collections. "
+                "Hint: check that ZOTERO_API_KEY has read permissions."
+            ) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Zotero API error when fetching collections: {e}. "
+                "Hint: verify Zotero is running and accessible."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error fetching collections: {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and Zotero availability."
+            ) from e
 
     @overload
     async def get_collection(self, *, name: str) -> ZoteroCollectionBase | None: ...
@@ -176,8 +210,21 @@ class ZoteroClient(ZoteroClientProtocol):
             key: Collection key (use as keyword argument: key='ABC123')
         """
         if key is not None:
-            data = await _run_sync(self._client.collection, key)
-            return Collection(self._client, data)
+            try:
+                data = await _run_sync(self._client.collection, key)
+                return Collection(self._client, data)
+            except zotero_errors.ResourceNotFoundError as e:
+                raise ZoteroNotFoundError("collection", key) from e
+            except zotero_errors.PyZoteroError as e:
+                raise ZoteroError(
+                    f"Zotero API error when fetching collection '{key}': {e}. "
+                    "Hint: verify the collection key is correct."
+                ) from e
+            except Exception as e:
+                raise ZoteroError(
+                    f"Unexpected error fetching collection '{key}': {type(e).__name__}: {e}. "
+                    "Hint: check network connectivity and Zotero availability."
+                ) from e
         elif name is not None:
             for collection in await self.get_collections():
                 if collection.name == name:
@@ -311,13 +358,44 @@ class ZoteroClient(ZoteroClientProtocol):
 
     async def get_item(self, item_key: str) -> ZoteroItem:
         """Get single item by key."""
-        raw_item = await _run_sync(self._client.item, item_key)
-        return ZoteroItem.model_validate(raw_item)
+        try:
+            raw_item = await _run_sync(self._client.item, item_key)
+            return ZoteroItem.model_validate(raw_item)
+        except zotero_errors.ResourceNotFoundError as e:
+            raise ZoteroNotFoundError("item", item_key) from e
+        except zotero_errors.UserNotAuthorisedError as e:
+            raise ZoteroError(
+                f"Access denied when fetching item '{item_key}'. "
+                "Hint: check that ZOTERO_API_KEY has read permissions."
+            ) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Zotero API error when fetching item '{item_key}': {e}. "
+                "Hint: verify Zotero is running and accessible."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error fetching item '{item_key}': {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and Zotero availability."
+            ) from e
 
     async def get_raw_item(self, item_key: str) -> dict[str, Any]:
         """Get raw item data as dict."""
-        raw_item: dict[str, Any] = await _run_sync(self._client.item, item_key)
-        return raw_item
+        try:
+            raw_item: dict[str, Any] = await _run_sync(self._client.item, item_key)
+            return raw_item
+        except zotero_errors.ResourceNotFoundError as e:
+            raise ZoteroNotFoundError("item", item_key) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Zotero API error when fetching item '{item_key}': {e}. "
+                "Hint: verify the item key is correct and Zotero is accessible."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error fetching item '{item_key}': {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and Zotero availability."
+            ) from e
 
     @webonly
     async def delete_item(self, item: ZoteroItem) -> None:
@@ -343,41 +421,106 @@ class ZoteroClient(ZoteroClientProtocol):
         Raises:
             ZoteroWriteError: If any items failed to create
         """
-        items_data = [item.model_dump(exclude_none=True, by_alias=True) for item in items]
-        raw_response = await _run_sync(self._client.create_items, items_data)
+        try:
+            items_data = [item.model_dump(exclude_none=True, by_alias=True) for item in items]
+            try:
+                raw_response = await _run_sync(self._client.create_items, items_data)
+            except zotero_errors.UserNotAuthorisedError as e:
+                raise ZoteroError(
+                    "Not authorized to create items. "
+                    "Hint: check that ZOTERO_API_KEY has write permissions."
+                ) from e
+            except zotero_errors.PyZoteroError as e:
+                raise ZoteroError(
+                    f"Zotero API error during item creation: {e}. "
+                    "Hint: verify web API credentials and connectivity."
+                ) from e
 
-        response = ZoteroWriteResponse.model_validate(raw_response)
+            response = ZoteroWriteResponse.model_validate(raw_response)
 
-        if response.has_failures():
-            raise ZoteroWriteError("create_items", response.failed)
+            if response.has_failures():
+                raise ZoteroWriteError("create_items", response.failed)
 
-        successful_items = response.get_successful_objects()
-        return [ZoteroItem.model_validate(item_dict) for item_dict in successful_items]
+            successful_items = response.get_successful_objects()
+            return [ZoteroItem.model_validate(item_dict) for item_dict in successful_items]
+        except ZoteroError:
+            raise
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error creating items: {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and web API credentials."
+            ) from e
 
     async def get_children(self, item_key: str) -> list[Attachment]:
         """Get child attachments for an item."""
-        children_data = await _run_sync(self._client.children, item_key)
-        return [
-            Attachment(
-                key=child["key"],
-                item_type=child["data"]["itemType"],
-                content_type=child["data"].get("contentType"),
-                filename=child["data"].get("filename"),
-                data=child["data"],
-            )
-            for child in children_data
-        ]
+        try:
+            children_data = await _run_sync(self._client.children, item_key)
+            return [
+                Attachment(
+                    key=child["key"],
+                    item_type=child["data"]["itemType"],
+                    content_type=child["data"].get("contentType"),
+                    filename=child["data"].get("filename"),
+                    data=child["data"],
+                )
+                for child in children_data
+            ]
+        except zotero_errors.ResourceNotFoundError as e:
+            raise ZoteroNotFoundError("item", item_key) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Failed to get children for item '{item_key}': {e}. "
+                "Hint: verify the item key is correct."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error getting children for item '{item_key}': "
+                f"{type(e).__name__}: {e}. "
+                "Hint: check network connectivity and Zotero availability."
+            ) from e
 
     @webonly
     async def update_item(self, item_key: str, update: ItemUpdate) -> None:
         """Update an existing item."""
-        item_dict = await _run_sync(self._client.item, item_key)
-        update_data = update.model_dump(exclude_none=True, by_alias=True)
+        try:
+            try:
+                item_dict = await _run_sync(self._client.item, item_key)
+            except zotero_errors.ResourceNotFoundError as e:
+                raise ZoteroNotFoundError("item", item_key) from e
+            except zotero_errors.PyZoteroError as e:
+                raise ZoteroError(
+                    f"Failed to fetch item '{item_key}' for update: {e}. "
+                    "Hint: verify the item key is correct."
+                ) from e
 
-        for key, value in update_data.items():
-            item_dict["data"][key] = value
+            update_data = update.model_dump(exclude_none=True, by_alias=True)
+            for key, value in update_data.items():
+                item_dict["data"][key] = value
 
-        await _run_sync(self._client.update_item, item_dict)
+            try:
+                await _run_sync(self._client.update_item, item_dict)
+            except zotero_errors.PreConditionFailedError as e:
+                raise ZoteroError(
+                    f"Update conflict for item '{item_key}': version mismatch. "
+                    "Hint: the item was modified by another client. Retry after re-fetching."
+                ) from e
+            except zotero_errors.UserNotAuthorisedError as e:
+                raise ZoteroError(
+                    f"Not authorized to update item '{item_key}'. "
+                    "Hint: check that ZOTERO_API_KEY has write permissions."
+                ) from e
+            except zotero_errors.PyZoteroError as e:
+                raise ZoteroError(
+                    f"Zotero API error updating item '{item_key}': {e}. "
+                    "Hint: verify web API credentials and connectivity."
+                ) from e
+        except ZoteroError:
+            raise
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error updating item '{item_key}': {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and web API credentials."
+            ) from e
 
     async def search_items(self, search_params: ZoteroSearchParams) -> list[ZoteroItem]:
         """Search top-level items across entire library with Zotero API parameters.
@@ -386,7 +529,24 @@ class ZoteroClient(ZoteroClientProtocol):
         with automatic pagination via everything().
         """
         api_params = search_params.to_api_params()
-        raw_items = await _run_sync(lambda: self._client.everything(self._client.top(**api_params)))
+        try:
+            raw_items = await _run_sync(
+                lambda: self._client.everything(self._client.top(**api_params))
+            )
+        except zotero_errors.UnsupportedParamsError as e:
+            raise ZoteroError(
+                f"Invalid search parameters: {e}. " "Hint: check query, item_type, and tag values."
+            ) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Zotero API error during search: {e}. "
+                "Hint: verify Zotero is running and accessible."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error during search: {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and Zotero availability."
+            ) from e
         return [ZoteroItem.model_validate(item) for item in raw_items]
 
     async def search_collection_items(
@@ -398,11 +558,30 @@ class ZoteroClient(ZoteroClientProtocol):
         fetching all results with automatic pagination via everything().
         """
         api_params = search_params.to_api_params()
-        raw_items = await _run_sync(
-            lambda: self._client.everything(
-                self._client.collection_items_top(collection_key, **api_params)
+        try:
+            raw_items = await _run_sync(
+                lambda: self._client.everything(
+                    self._client.collection_items_top(collection_key, **api_params)
+                )
             )
-        )
+        except zotero_errors.ResourceNotFoundError as e:
+            raise ZoteroNotFoundError("collection", collection_key) from e
+        except zotero_errors.UnsupportedParamsError as e:
+            raise ZoteroError(
+                f"Invalid search parameters for collection '{collection_key}': {e}. "
+                "Hint: check query, item_type, and tag values."
+            ) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Zotero API error searching collection '{collection_key}': {e}. "
+                "Hint: verify the collection key is correct and Zotero is accessible."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error searching collection '{collection_key}': "
+                f"{type(e).__name__}: {e}. "
+                "Hint: check network connectivity and Zotero availability."
+            ) from e
         return [ZoteroItem.model_validate(item) for item in raw_items]
 
     @webonly
@@ -414,28 +593,68 @@ class ZoteroClient(ZoteroClientProtocol):
         Raises:
             ZoteroWriteError: If any collections failed to create
         """
-        collections_data = [
-            {"name": c.name, "parentCollection": c.parent_collection} for c in collections
-        ]
-        raw_response = await _run_sync(self._client.create_collections, collections_data)
+        try:
+            collections_data = [
+                {"name": c.name, "parentCollection": c.parent_collection} for c in collections
+            ]
+            try:
+                raw_response = await _run_sync(self._client.create_collections, collections_data)
+            except zotero_errors.UserNotAuthorisedError as e:
+                raise ZoteroError(
+                    "Not authorized to create collections. "
+                    "Hint: check that ZOTERO_API_KEY has write permissions."
+                ) from e
+            except zotero_errors.PyZoteroError as e:
+                raise ZoteroError(
+                    f"Zotero API error during collection creation: {e}. "
+                    "Hint: verify web API credentials and connectivity."
+                ) from e
 
-        response = ZoteroWriteResponse.model_validate(raw_response)
+            response = ZoteroWriteResponse.model_validate(raw_response)
 
-        if response.has_failures():
-            raise ZoteroWriteError("create_collections", response.failed)
+            if response.has_failures():
+                raise ZoteroWriteError("create_collections", response.failed)
 
-        successful_colls = response.get_successful_objects()
-        validated_colls = [
-            ZoteroCollectionResponse.model_validate(coll) for coll in successful_colls
-        ]
-        return [Collection(self._client, coll.model_dump(mode="json")) for coll in validated_colls]
+            successful_colls = response.get_successful_objects()
+            validated_colls = [
+                ZoteroCollectionResponse.model_validate(coll) for coll in successful_colls
+            ]
+            return [
+                Collection(self._client, coll.model_dump(mode="json")) for coll in validated_colls
+            ]
+        except ZoteroError:
+            raise
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error creating collections: {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and web API credentials."
+            ) from e
 
     @webonly
     async def add_to_collection(self, collection_key: str, items: list[ZoteroItem]) -> None:
         """Add items to a collection."""
         for item in items:
-            await _run_sync(
-                self._client.addto_collection,
-                collection_key,
-                item.model_dump(by_alias=True),
-            )
+            try:
+                await _run_sync(
+                    self._client.addto_collection,
+                    collection_key,
+                    item.model_dump(by_alias=True),
+                )
+            except zotero_errors.ResourceNotFoundError as e:
+                raise ZoteroNotFoundError("collection", collection_key) from e
+            except zotero_errors.UserNotAuthorisedError as e:
+                raise ZoteroError(
+                    f"Not authorized to modify collection '{collection_key}'. "
+                    "Hint: check that ZOTERO_API_KEY has write permissions."
+                ) from e
+            except zotero_errors.PyZoteroError as e:
+                raise ZoteroError(
+                    f"Failed to add item '{item.key}' to collection '{collection_key}': {e}. "
+                    "Hint: verify the collection key exists and credentials are correct."
+                ) from e
+            except Exception as e:
+                raise ZoteroError(
+                    f"Unexpected error adding item '{item.key}' to collection "
+                    f"'{collection_key}': {type(e).__name__}: {e}. "
+                    "Hint: check network connectivity and web API credentials."
+                ) from e

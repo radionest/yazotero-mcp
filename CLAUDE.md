@@ -50,7 +50,10 @@ uv sync --group dev
 # Запуск сервера
 uv run python -m yazot.mcp_server
 
-# Тесты (pytest-asyncio, asyncio_mode="auto")
+# Быстрые unit-тесты (без live Zotero)
+uv run pytest tests/test_formatters.py tests/test_response_chunker.py tests/test_text_chunker.py tests/test_client_router.py -q
+
+# Все тесты (часть требует запущенный Zotero + API key)
 uv run pytest
 uv run pytest tests/test_formatters.py -v     # конкретный файл
 uv run pytest -k "test_search" -v              # по имени
