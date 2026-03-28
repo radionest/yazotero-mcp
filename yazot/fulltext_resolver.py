@@ -198,7 +198,7 @@ class FulltextResolver:
                 url = await self._unpaywall.find_pdf_url(doi)
                 if url:
                     return url, "unpaywall"
-            except (FulltextSourceError, httpx.RequestError) as e:
+            except FulltextSourceError as e:
                 logger.warning("Unpaywall failed for %s: %s", doi, e)
 
         if self._core and (doi or title):
@@ -206,7 +206,7 @@ class FulltextResolver:
                 url = await self._core.find_pdf_url(doi, title)
                 if url:
                     return url, "core"
-            except (FulltextSourceError, httpx.RequestError) as e:
+            except FulltextSourceError as e:
                 logger.warning("CORE failed for doi=%s title=%s: %s", doi, title, e)
 
         if title and self._libgen:
@@ -214,7 +214,7 @@ class FulltextResolver:
                 url = await self._libgen.find_pdf_url(title)
                 if url:
                     return url, "libgen"
-            except (FulltextSourceError, httpx.RequestError) as e:
+            except FulltextSourceError as e:
                 logger.warning("Libgen failed for %s: %s", title, e)
 
         raise FulltextNotFoundError(doi=doi, title=title)
@@ -230,7 +230,7 @@ class FulltextResolver:
             raise FulltextDownloadError(pdf_url, str(e)) from e
 
         content_type = response.headers.get("content-type", "")
-        if "pdf" not in content_type and not pdf_url.endswith(".pdf"):
+        if "text/html" in content_type:
             raise FulltextDownloadError(pdf_url, f"Unexpected content-type: {content_type}")
 
         if not response.content:

@@ -420,6 +420,21 @@ class TestFulltextResolver:
         ):
             await resolver.download("https://example.com/not-a-pdf")
 
+    async def test_download_empty_pdf_body(self, settings_all: Settings) -> None:
+        resolver = FulltextResolver(settings_all)
+        mock_response = make_httpx_response(
+            content=b"",
+            headers={"content-type": "application/pdf"},
+        )
+
+        with (
+            patch.object(
+                resolver._http, "get", new_callable=AsyncMock, return_value=mock_response
+            ),
+            pytest.raises(FulltextDownloadError, match="Empty response body"),
+        ):
+            await resolver.download("https://example.com/empty.pdf")
+
     async def test_download_http_error(self, settings_all: Settings) -> None:
         resolver = FulltextResolver(settings_all)
         mock_response = make_httpx_response(status_code=403)
@@ -446,6 +461,19 @@ class TestFulltextResolver:
             text = resolver.extract_text(pdf_bytes)
 
         assert text == "Page 1 text"
+
+    def test_extract_text_pdf_parse_failure(self, settings_all: Settings) -> None:
+        resolver = FulltextResolver(settings_all)
+        pdf_bytes = make_pdf_bytes()
+
+        with (
+            patch(
+                "yazot.fulltext_resolver.PdfReader",
+                side_effect=ValueError("corrupt"),
+            ),
+            pytest.raises(FulltextDownloadError, match="Failed to parse PDF"),
+        ):
+            resolver.extract_text(pdf_bytes)
 
     def test_extract_text_multiple_pages(self, settings_all: Settings) -> None:
         resolver = FulltextResolver(settings_all)
