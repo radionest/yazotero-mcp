@@ -1,5 +1,7 @@
 """Tests for ZoteroClientRouter and webonly decorator."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from yazot.client_router import ZoteroClientRouter
@@ -168,3 +170,104 @@ class TestZoteroClientProtocolImplementation:
         if router.has_local_client:
             # Cache should come from read_client
             assert router.cache is router.read_client.cache
+
+
+class TestRouterGetItemFulltext:
+    """Test get_item_fulltext routing and fallback logic."""
+
+    @staticmethod
+    def _make_hybrid_router() -> ZoteroClientRouter:
+        settings = Settings(zotero_local=True, zotero_library_id="1")
+        router = ZoteroClientRouter(settings=settings)
+        if not router._local_client or not router._web_client:
+            pytest.skip("Need both local and web clients for hybrid tests")
+        return router
+
+    @pytest.mark.asyncio
+    async def test_returns_read_client_result_without_web_fallback(self) -> None:
+        """When read_client returns text, web_client is never called."""
+        router = self._make_hybrid_router()
+
+        with (
+            patch.object(
+                router.read_client,
+                "get_item_fulltext",
+                new_callable=AsyncMock,
+                return_value="local text",
+            ),
+            patch.object(
+                router._web_client,  # type: ignore[union-attr]
+                "get_item_fulltext",
+                new_callable=AsyncMock,
+            ) as web_mock,
+        ):
+            result = await router.get_item_fulltext("KEY")
+
+        assert result == "local text"
+        web_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_web_when_read_returns_none(self) -> None:
+        """When read_client returns None, falls back to web_client."""
+        router = self._make_hybrid_router()
+
+        with (
+            patch.object(
+                router.read_client,
+                "get_item_fulltext",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch.object(
+                router._web_client,  # type: ignore[union-attr]
+                "get_item_fulltext",
+                new_callable=AsyncMock,
+                return_value="web text",
+            ) as web_mock,
+        ):
+            result = await router.get_item_fulltext("KEY")
+
+        assert result == "web text"
+        web_mock.assert_called_once_with("KEY")
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_web_when_read_raises(self) -> None:
+        """When read_client raises, falls back to web_client."""
+        router = self._make_hybrid_router()
+
+        with (
+            patch.object(
+                router.read_client,
+                "get_item_fulltext",
+                new_callable=AsyncMock,
+                side_effect=Exception("connection refused"),
+            ),
+            patch.object(
+                router._web_client,  # type: ignore[union-attr]
+                "get_item_fulltext",
+                new_callable=AsyncMock,
+                return_value="web text",
+            ) as web_mock,
+        ):
+            result = await router.get_item_fulltext("KEY")
+
+        assert result == "web text"
+        web_mock.assert_called_once_with("KEY")
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_single_client_has_no_fulltext(self) -> None:
+        """With only one client, returns None if it has no fulltext."""
+        settings = Settings(zotero_local=True, zotero_library_id="1")
+        router = ZoteroClientRouter(settings=settings)
+        # Force single-client mode
+        router._web_client = None
+
+        with patch.object(
+            router.read_client,
+            "get_item_fulltext",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            result = await router.get_item_fulltext("KEY")
+
+        assert result is None
