@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -6,6 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 from fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
@@ -213,6 +215,8 @@ async def get_collection_items(
         for result in results:
             if isinstance(result, BaseException):
                 if not isinstance(result, Exception):
+                    raise result
+                if not isinstance(result, httpx.ConnectError | httpx.TimeoutException):
                     raise result
                 logger.warning("Failed to fetch subcollection: %s", result)
                 continue
