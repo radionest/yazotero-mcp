@@ -68,6 +68,8 @@ zotero-mcp.code-workspace
 
 # Claude Code
 .claude/settings.local.json
+.claude/worktrees/
 
 # Dev notes (Obsidian vault)
+dev-notes
 dev-notes/
