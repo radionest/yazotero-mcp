@@ -1,4 +1,8 @@
+import asyncio
 import json
+import logging
+import os
+import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -9,9 +13,11 @@ from .chunker import ResponseChunker, TextChunker
 from .client_router import ZoteroClientRouter
 from .config import Settings
 from .crossref_client import CrossrefClient
-from .exceptions import ZoteroError, ZoteroNotFoundError
+from .exceptions import ConfigurationError, ZoteroError, ZoteroNotFoundError
+from .fulltext_resolver import FulltextResolver
 from .models import (
     CollectionCreate,
+    ExternalFulltextResponse,
     FulltextResponse,
     Note,
     SearchCollectionResponse,
@@ -23,6 +29,8 @@ from .models import (
 )
 from .note_manager import NoteManager
 from .verifier import NoteVerifier
+
+logger = logging.getLogger(__name__)
 
 
 def _deps(ctx: Context) -> dict[str, Any]:
@@ -41,6 +49,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     text_chunker = TextChunker(max_tokens=settings.max_chunk_size)
     note_manager = NoteManager(router)
     verifier = NoteVerifier(note_manager, router)
+    resolver = FulltextResolver(settings)
 
     try:
         yield {
@@ -51,9 +60,11 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
             "text_chunker": text_chunker,
             "note_manager": note_manager,
             "verifier": verifier,
+            "resolver": resolver,
         }
     finally:
         await crossref.aclose()
+        await resolver.aclose()
 
 
 # Create FastMCP server with error masking for security
@@ -76,6 +87,10 @@ mcp: FastMCP = FastMCP(
 ### Fulltext Access
 - `get_item_fulltext(item_key)`: Get PDF text (tries indexed API, falls back to direct parsing)
   - Returns chunked text (use `get_next_fulltext_chunk` if `has_more=True`)
+- `fetch_external_fulltext(item_key, doi, title)`: Search external sources for fulltext
+  - Cascade: Unpaywall → CORE → Libgen (if enabled)
+  - If `item_key` provided: extracts DOI/title automatically, attaches PDF to item
+  - Use when `get_item_fulltext` returns no content
 - `get_next_fulltext_chunk(chunk_id)`: Continue retrieving text chunks
 
 ### Notes
@@ -116,6 +131,12 @@ mcp: FastMCP = FastMCP(
 2. If `has_more=True`, call `get_next_chunk(chunk_id)` repeatedly
 3. For specific item, call `get_item_fulltext(item_key)`
 4. If fulltext `has_more=True`, call `get_next_fulltext_chunk(chunk_id)` repeatedly
+
+**Fetch fulltext from external sources:**
+1. `fetch_external_fulltext(item_key="ABC123")` — uses DOI from item, attaches PDF
+2. Or `fetch_external_fulltext(doi="10.1234/example")` — standalone search by DOI
+3. Or `fetch_external_fulltext(title="Article title")` — search by title
+4. If `has_more=True`, call `get_next_fulltext_chunk(chunk_id)` repeatedly
 
 **Add/move articles to collection:**
 1. Search for articles using `search_articles` or `get_collection_items`
@@ -615,6 +636,138 @@ async def verify_note(note_key: str, ctx: Context) -> VerificationResult:
     """
     verifier: NoteVerifier = _deps(ctx)["verifier"]
     return await verifier.verify(note_key)
+
+
+@mcp.tool
+async def fetch_external_fulltext(
+    ctx: Context,
+    item_key: str | None = None,
+    doi: str | None = None,
+    title: str | None = None,
+) -> ExternalFulltextResponse:
+    """
+    Fetch full text of an article from external open-access sources.
+
+    Searches external sources in cascade order:
+    1. Unpaywall (by DOI) - legal open-access repository
+    2. CORE (by DOI or title) - academic aggregator
+    3. Libgen (by title) - only if explicitly enabled in config
+
+    If item_key is provided, DOI/title are extracted from the Zotero item automatically,
+    and the downloaded PDF is attached to the item.
+
+    At least one of item_key, doi, or title must be provided.
+
+    Args:
+        item_key: Optional Zotero item key — extracts DOI/title and attaches PDF
+        doi: DOI identifier (preferred for best results)
+        title: Article title (used for CORE and libgen search)
+
+    Returns:
+        ExternalFulltextResponse with extracted text content (potentially chunked)
+
+    IMPORTANT CHUNKING BEHAVIOR:
+    - If response contains 'has_more=True', there are more text chunks
+    - Call 'get_next_fulltext_chunk' with the provided 'chunk_id'
+    - Continue calling until 'has_more=False'
+    """
+    resolver: FulltextResolver = _deps(ctx)["resolver"]
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+    text_chunker: TextChunker = _deps(ctx)["text_chunker"]
+
+    if not resolver.is_configured:
+        raise ConfigurationError(
+            "External fulltext retrieval is not configured. "
+            "Set UNPAYWALL_EMAIL and/or CORE_API_KEY in .env"
+        )
+
+    # Extract DOI/title from Zotero item if item_key provided
+    effective_doi = doi
+    effective_title = title
+    if item_key:
+        item = await router.get_item(item_key)
+        if not effective_doi:
+            effective_doi = item.data.doi or None
+        if not effective_title:
+            effective_title = item.data.title or None
+
+    if not effective_doi and not effective_title:
+        raise ZoteroError("At least one of doi or title must be provided or resolvable from item")
+
+    # Resolve PDF URL through cascade
+    pdf_url, source = await resolver.resolve(effective_doi, effective_title)
+
+    # Download and extract text
+    pdf_bytes = await resolver.download(pdf_url)
+    text = resolver.extract_text(pdf_bytes)
+
+    if not text.strip():
+        return ExternalFulltextResponse(
+            item_key=item_key,
+            content="",
+            source=source,
+            error="PDF downloaded but no text could be extracted",
+        )
+
+    # Attach PDF to Zotero item if item_key provided
+    pdf_attached = False
+    if item_key:
+        pdf_attached = await _attach_pdf_to_item(ctx, item_key, pdf_bytes)
+
+    # Chunk if needed (reuse existing TextChunker + get_next_fulltext_chunk)
+    chunk_key = item_key or effective_doi or effective_title or "external"
+    if not text_chunker.needs_chunking(text):
+        return ExternalFulltextResponse(
+            item_key=item_key,
+            content=text,
+            source=source,
+            pdf_attached=pdf_attached,
+        )
+
+    chunk_data = text_chunker.chunk_text(text, chunk_key)
+    message = None
+    if chunk_data.has_more:
+        message = (
+            f"Fulltext chunked ({chunk_data.chunk_info}). "
+            f"To get remaining text, call: "
+            f"get_next_fulltext_chunk(chunk_id='{chunk_data.chunk_id}')"
+        )
+
+    return ExternalFulltextResponse(
+        item_key=item_key,
+        content=chunk_data.content,
+        source=source,
+        pdf_attached=pdf_attached,
+        has_more=chunk_data.has_more,
+        chunk_id=chunk_data.chunk_id,
+        current_chunk=chunk_data.current_chunk,
+        total_chunks=chunk_data.total_chunks,
+        message=message,
+    )
+
+
+async def _attach_pdf_to_item(ctx: Context, item_key: str, pdf_bytes: bytes) -> bool:
+    """Attempt to attach PDF to a Zotero item. Returns True if successful."""
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+    try:
+        write_client = router.write_client
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            f.write(pdf_bytes)
+            tmp_path = f.name
+        try:
+            await asyncio.to_thread(
+                write_client._client.attachment_simple,
+                [tmp_path],
+                item_key,
+            )
+            return True
+        finally:
+            os.unlink(tmp_path)
+    except Exception as e:
+        logger.warning(
+            "PDF attachment failed for item %s: %s", item_key, e
+        )
+        return False
 
 
 @mcp.tool

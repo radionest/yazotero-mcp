@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # so 5000 content tokens + JSON metadata overhead fits safely within that limit.
     max_chunk_size: int = Field(default=5000)
 
+    # External fulltext retrieval
+    unpaywall_email: str | None = Field(default=None)
+    core_api_key: str | None = Field(default=None)
+    fulltext_libgen_enabled: bool = Field(default=False)
+    fulltext_libgen_mirror: str = Field(default="https://libgen.is")
+
     @model_validator(mode="after")
     def validate_credentials(self) -> Self:
         """Validate credentials based on mode."""

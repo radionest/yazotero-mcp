@@ -194,3 +194,40 @@ class CrossRefConnectionError(CrossReffError):
         message = f"Failed to connect to Crossref API: {detail}"
         super().__init__(message)
         self.detail = detail
+
+
+class FulltextResolverError(ToolError):
+    """Base exception for external fulltext resolution operations."""
+
+    pass
+
+
+class FulltextNotFoundError(FulltextResolverError):
+    """Raised when no external source returned a PDF."""
+
+    def __init__(self, doi: str | None, title: str | None) -> None:
+        identifier = doi or title or "unknown"
+        message = f"No fulltext found from external sources for: {identifier}"
+        super().__init__(message)
+        self.doi = doi
+        self.title = title
+
+
+class FulltextDownloadError(FulltextResolverError):
+    """Raised when PDF download or text extraction fails."""
+
+    def __init__(self, url: str, detail: str) -> None:
+        message = f"Failed to download/extract PDF from {url}: {detail}"
+        super().__init__(message)
+        self.url = url
+        self.detail = detail
+
+
+class FulltextSourceError(FulltextResolverError):
+    """Raised when an external source API returns an error."""
+
+    def __init__(self, source: str, detail: str) -> None:
+        message = f"{source} error: {detail}"
+        super().__init__(message)
+        self.source = source
+        self.detail = detail
