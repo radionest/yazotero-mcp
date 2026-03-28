@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     max_chunk_size: int = Field(default=5000)
     # Max parallel requests to Zotero Web API (prevents 429 rate limiting).
     # Only applies in web mode; local mode has no rate limits.
-    web_zotero_max_concurrent_requests: int = Field(default=5)
+    web_zotero_max_concurrent_requests: int = Field(default=5, ge=1)
 
     # External fulltext retrieval
     unpaywall_email: str | None = Field(default=None)
