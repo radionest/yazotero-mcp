@@ -1,91 +1,92 @@
 # YAZot MCP Server
 
-MCP-сервер для работы с библиотеками Zotero: поиск, оценка научных статей, анализ полных текстов PDF и управление аннотациями.
+MCP server for Zotero libraries: search, evaluate scientific articles, analyze PDF full texts, and manage annotations.
 
 ## Tech Stack
 
-- Python 3.12, type hints везде (включая `type` alias syntax, generics `[T]`)
-- FastMCP 2.x — MCP-сервер (декоратор `@mcp.tool`, `@mcp.resource`)
-- Pydantic v2 + pydantic-settings — модели и конфигурация
-- pyzotero — клиент Zotero API (local + web)
+- Python 3.12, type hints everywhere (including `type` alias syntax, generics `[T]`)
+- FastMCP 2.x — MCP server (`@mcp.tool`, `@mcp.resource` decorators)
+- Pydantic v2 + pydantic-settings — models and configuration
+- pyzotero — Zotero API client (local + web)
 - httpx — async HTTP (Crossref API)
-- beautifulsoup4 — парсинг HTML заметок
-- uv — пакетный менеджер, lockfile `uv.lock`
+- beautifulsoup4 — HTML note parsing
+- uv — package manager, lockfile `uv.lock`
 
 ## Architecture
 
 ```
 yazot/
-├── mcp_server.py         # FastMCP tools/resources — точка входа
-├── zotero_client.py      # ZoteroClient — обёртка pyzotero, local/web режимы
-├── client_router.py      # ZoteroClientRouter — роутинг read→local, write→web
-├── protocols.py          # ZoteroClientProtocol + @webonly декоратор
-├── models.py             # Все Pydantic-модели (ZoteroItem, Note, SearchParams...)
-├── crossref_client.py    # Получение метаданных по DOI через Crossref API
-├── fulltext_resolver.py  # Каскадный поиск fulltext: Unpaywall → CORE → Libgen
+├── mcp_server.py         # FastMCP tools/resources — entry point
+├── zotero_client.py      # ZoteroClient — pyzotero wrapper, local/web modes
+├── client_router.py      # ZoteroClientRouter — routes read→local, write→web
+├── protocols.py          # ZoteroClientProtocol + @webonly decorator
+├── models.py             # All Pydantic models (ZoteroItem, Note, SearchParams...)
+├── crossref_client.py    # DOI metadata retrieval via Crossref API
+├── fulltext_resolver.py  # Cascading fulltext search: Unpaywall → CORE → Libgen
 ├── pdf_utils.py          # Shared: extract_text_from_pdf(bytes) → str
-├── note_manager.py       # CRUD заметок (зависит от ZoteroClientProtocol)
+├── note_manager.py       # Note CRUD (depends on ZoteroClientProtocol)
 ├── chunker.py            # ResponseChunker (items) + TextChunker (fulltext)
-├── verifier.py           # NoteVerifier — проверка цитат в заметках против fulltext
-├── formatters.py         # Конвертация text↔HTML для заметок
+├── verifier.py           # NoteVerifier — verifies note citations against fulltext
+├── formatters.py         # text↔HTML conversion for notes
 ├── config.py             # Settings (pydantic-settings, .env)
-└── exceptions.py         # Иерархия ошибок на базе ToolError
+└── exceptions.py         # Error hierarchy based on ToolError
 ```
 
 ## Key Patterns
 
-- **Protocol-based DI**: `ZoteroClientProtocol` в `protocols.py`, реализуют `ZoteroClient` и `ZoteroClientRouter`
-- **Router pattern**: `ClientRouter` маршрутизирует read→local (быстрее), write→web (local read-only)
-- **@webonly decorator**: помечает методы, требующие web API; бросает `WebOnlyOperationError` в local-режиме
-- **Chunking**: ответы > `max_chunk_size` токенов разбиваются на чанки с `chunk_id` + `has_more`.
-  `MAX_CHUNK_SIZE` (default=5000 токенов ≈ 20K символов) — настроен под лимит Claude Code tool result (~10K токенов).
-  Оценка токенов: `len(text) // 4`. `ResponseChunker` дополнительно вычитает `METADATA_OVERHEAD=2000` из лимита.
-- **Error hierarchy**: все исключения наследуют `ToolError` (FastMCP) → видны MCP-клиенту даже при `mask_error_details=True`
-- **ABC**: `ZoteroItemIterator`, `ZoteroCollectionBase` — абстрактные базы в `models.py`
+- **Protocol-based DI**: `ZoteroClientProtocol` in `protocols.py`, implemented by `ZoteroClient` and `ZoteroClientRouter`
+- **Router pattern**: `ClientRouter` routes read→local (faster), write→web (local is read-only)
+- **@webonly decorator**: marks methods requiring web API; raises `WebOnlyOperationError` in local mode
+- **Chunking**: responses > `max_chunk_size` tokens are split into chunks with `chunk_id` + `has_more`.
+  `MAX_CHUNK_SIZE` (default=5000 tokens ≈ 20K chars) — tuned for Claude Code tool result limit (~10K tokens).
+  Token estimation: `len(text) // 4`. `ResponseChunker` additionally subtracts `METADATA_OVERHEAD=2000` from the limit.
+- **Error hierarchy**: all exceptions inherit `ToolError` (FastMCP) → visible to MCP client even with `mask_error_details=True`
+- **ABC**: `ZoteroItemIterator`, `ZoteroCollectionBase` — abstract bases in `models.py`
 
 ## Development
 
 ```bash
-# Установка dev-зависимостей (обязательно в новом worktree!)
+# Install dev dependencies (required in new worktrees!)
 uv sync --group dev
 
-# Запуск сервера
+# Run server
 uv run python -m yazot.mcp_server
 
-# Быстрые unit-тесты (без live Zotero)
+# Fast unit tests (no live Zotero needed)
 uv run pytest tests/test_formatters.py tests/test_response_chunker.py tests/test_text_chunker.py tests/test_client_router.py -q
 
-# Все тесты (часть требует запущенный Zotero + API key)
+# All tests (some require running Zotero + API key)
 uv run pytest
-uv run pytest tests/test_formatters.py -v     # конкретный файл
-uv run pytest -k "test_search" -v              # по имени
+uv run pytest tests/test_formatters.py -v     # specific file
+uv run pytest -k "test_search" -v              # by name
 
-# Линтеры (pre-commit: black, ruff, mypy) — запускать последовательно, не параллельно
+# Linters (pre-commit: black, ruff, mypy) — run sequentially, not in parallel
 uv run ruff check yazot/ tests/
 uv run black --check yazot/ tests/
 uv run mypy yazot/
 
-# Все pre-commit хуки
+# All pre-commit hooks
 pre-commit run --all-files
 ```
 
-**Хуки Claude Code**: PostToolUse на Edit/Write автоматически запускает ruff --fix + black на .py файлах.
+**Claude Code hooks**: PostToolUse on Edit/Write auto-runs ruff --fix + black on .py files.
 
 ## Environment
 
-Конфигурация через `.env` (pydantic-settings). Два режима:
-- **Local** (`ZOTERO_LOCAL=true`): подключение к локальному Zotero (localhost:23119), read-only
-- **Web** (`ZOTERO_LOCAL=false`): требует `ZOTERO_LIBRARY_ID` + `ZOTERO_API_KEY`, полный доступ
+Configuration via `.env` (pydantic-settings). Two modes:
+- **Local** (`ZOTERO_LOCAL=true`): connects to local Zotero (localhost:23119), read-only
+- **Web** (`ZOTERO_LOCAL=false`): requires `ZOTERO_LIBRARY_ID` + `ZOTERO_API_KEY`, full access
 
-Для тестов: `.env.test` (загружается автоматически через `conftest.py`)
+For tests: `.env.test` (auto-loaded via `conftest.py`)
 
 ## Conventions
 
-- Все модели — Pydantic v2 BaseModel (не словари)
-- Тесты: моки через `unittest.mock`, фикстуры в `conftest.py`
-- Ошибки: кастомные исключения из `exceptions.py`, не голые Exception
-- `ZoteroItemData.doi` может быть `""` (пустая строка), не только `None` — нормализуй через `or None`
-- PDF attachment: `router.attach_pdf(item_key, filepath)` — НЕ через `_client` напрямую
-- PDF extraction: `pdf_utils.extract_text_from_pdf(bytes)` — shared утилита, не дублировать
-- E2E error tests: `Client.call_tool` бросает `ToolError` по умолчанию — используй `pytest.raises(ToolError)`
+- All models — Pydantic v2 BaseModel (not dicts)
+- Tests: mocks via `unittest.mock`, fixtures in `conftest.py`, pytest-asyncio (`asyncio_mode="auto"`)
+- All MCP tools and I/O are async
+- Errors: custom exceptions from `exceptions.py`, never bare Exception
+- `ZoteroItemData.doi` can be `""` (empty string), not just `None` — normalize via `or None`
+- PDF attachment: `router.attach_pdf(item_key, filepath)` — NOT via `_client` directly
+- PDF extraction: `pdf_utils.extract_text_from_pdf(bytes)` — shared utility, do not duplicate
+- E2E error tests: `Client.call_tool` raises `ToolError` by default — use `pytest.raises(ToolError)`
 - Mock httpx responses: `from tests.conftest import make_httpx_response`

@@ -6,19 +6,19 @@ model: sonnet
 
 # Git Commit Agent
 
-Анализирует изменения в репозитории и создаёт атомарные коммиты в формате Conventional Commits.
+Analyzes repository changes and creates atomic commits in Conventional Commits format.
 
-## Алгоритм
+## Algorithm
 
-1. `git status` + `git diff` — понять все изменения
-2. Сгруппировать связанные изменения — один логический change = один коммит
-3. `git add <конкретные файлы>` для каждой группы
-4. Коммит: `type(scope): description`
-5. Проверка: `git log --oneline -3` + `git status`
+1. `git status` + `git diff` — understand all changes
+2. Group related changes — one logical change = one commit
+3. `git add <specific files>` for each group
+4. Commit: `type(scope): description`
+5. Verify: `git log --oneline -3` + `git status`
 
-## Специфика проекта
+## Project specifics
 
-- Scope — имена модулей из `yazot/` (mcp_server, chunker, models, client_router и т.д.)
-- Тесты вместе с реализацией — в одном коммите
-- Сообщения коммитов на английском
-- Без Co-Authored-By тегов
+- Scope — module names from `yazot/` (mcp_server, chunker, models, client_router, etc.)
+- Tests together with implementation — in one commit
+- Commit messages in English
+- No Co-Authored-By tags
