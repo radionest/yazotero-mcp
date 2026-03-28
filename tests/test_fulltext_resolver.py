@@ -1,13 +1,12 @@
 """Tests for external fulltext resolver — Unpaywall, CORE, Libgen clients + cascade."""
 
 import io
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 from pypdf import PdfWriter
 
+from tests.conftest import make_httpx_response
 from yazot.config import Settings
 from yazot.exceptions import (
     FulltextDownloadError,
@@ -24,32 +23,13 @@ from yazot.fulltext_resolver import (
 # --- Helpers ---
 
 
-def make_pdf_bytes(text: str = "Sample PDF text content") -> bytes:
+def make_pdf_bytes() -> bytes:
     """Create minimal valid PDF bytes for testing."""
     writer = PdfWriter()
     writer.add_blank_page(width=200, height=200)
     buf = io.BytesIO()
     writer.write(buf)
     return buf.getvalue()
-
-
-def make_httpx_response(
-    status_code: int = 200,
-    json_data: dict | None = None,
-    content: bytes = b"",
-    headers: dict | None = None,
-) -> httpx.Response:
-    """Create a mock httpx.Response."""
-    if json_data is not None:
-        content = json.dumps(json_data).encode()
-        headers = {**(headers or {}), "content-type": "application/json"}
-    resp = httpx.Response(
-        status_code=status_code,
-        content=content,
-        headers=headers or {},
-        request=httpx.Request("GET", "https://example.com"),
-    )
-    return resp
 
 
 # --- UnpaywallClient tests ---
@@ -451,7 +431,7 @@ class TestFulltextResolver:
         resolver = FulltextResolver(settings_all)
         pdf_bytes = make_pdf_bytes()
 
-        with patch("yazot.fulltext_resolver.PdfReader") as mock_reader_cls:
+        with patch("yazot.pdf_utils.PdfReader") as mock_reader_cls:
             mock_page = MagicMock()
             mock_page.extract_text.return_value = "Page 1 text"
             mock_reader = MagicMock()
@@ -463,13 +443,15 @@ class TestFulltextResolver:
         assert text == "Page 1 text"
 
     def test_extract_text_pdf_parse_failure(self, settings_all: Settings) -> None:
+        from pypdf.errors import PdfReadError
+
         resolver = FulltextResolver(settings_all)
         pdf_bytes = make_pdf_bytes()
 
         with (
             patch(
-                "yazot.fulltext_resolver.PdfReader",
-                side_effect=ValueError("corrupt"),
+                "yazot.pdf_utils.PdfReader",
+                side_effect=PdfReadError("corrupt"),
             ),
             pytest.raises(FulltextDownloadError, match="Failed to parse PDF"),
         ):
@@ -479,7 +461,7 @@ class TestFulltextResolver:
         resolver = FulltextResolver(settings_all)
         pdf_bytes = make_pdf_bytes()
 
-        with patch("yazot.fulltext_resolver.PdfReader") as mock_reader_cls:
+        with patch("yazot.pdf_utils.PdfReader") as mock_reader_cls:
             pages = []
             for i in range(3):
                 page = MagicMock()

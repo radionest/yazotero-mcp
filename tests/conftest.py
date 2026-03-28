@@ -1,10 +1,12 @@
 import contextlib
+import json
 import os
 from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from dotenv import load_dotenv
 from fastmcp import Context
@@ -748,3 +750,28 @@ def local_live_client(
         zotero_library_id="0",
     )
     return ZoteroClient(settings)
+
+
+# Test helpers
+
+
+def make_httpx_response(
+    status_code: int = 200,
+    json_data: dict[str, Any] | None = None,
+    content: bytes = b"",
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    """Create a mock httpx.Response for testing HTTP clients.
+
+    If json_data is provided, it is serialized to content and content-type
+    header is set to application/json automatically.
+    """
+    if json_data is not None:
+        content = json.dumps(json_data).encode()
+        headers = {**(headers or {}), "content-type": "application/json"}
+    return httpx.Response(
+        status_code=status_code,
+        content=content,
+        headers=headers or {},
+        request=httpx.Request("GET", "https://example.com"),
+    )

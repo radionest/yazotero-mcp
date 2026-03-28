@@ -18,6 +18,7 @@ from .models import (
     ZoteroSearchParams,
     ZoteroWriteResponse,
 )
+from .pdf_utils import extract_text_from_pdf
 from .protocols import ZoteroClientProtocol, webonly
 
 logger = logging.getLogger(__name__)
@@ -326,21 +327,7 @@ class ZoteroClient(ZoteroClientProtocol):
                 return None
 
             pdf_bytes = await _run_sync(self._client.file, pdf_key)
-
-            import io
-
-            from pypdf import PdfReader
-
-            pdf_file = io.BytesIO(pdf_bytes)
-            reader = PdfReader(pdf_file)
-
-            text_parts = []
-            for page in reader.pages:
-                text = page.extract_text()
-                if text:
-                    text_parts.append(text)
-
-            full_text = "\n\n".join(text_parts)
+            full_text = extract_text_from_pdf(pdf_bytes)
 
             if full_text:
                 self._cache[cache_key] = full_text
@@ -658,6 +645,37 @@ class ZoteroClient(ZoteroClientProtocol):
                     f"'{collection_key}': {type(e).__name__}: {e}. "
                     "Hint: check network connectivity and web API credentials."
                 ) from e
+
+    @webonly
+    async def attach_pdf(self, item_key: str, filepath: str) -> None:
+        """Attach a PDF file to a Zotero item.
+
+        Uses pyzotero's attachment_simple which creates a new attachment
+        with the filename as title.
+
+        Args:
+            item_key: Parent item key to attach the PDF to
+            filepath: Path to the PDF file on disk
+        """
+        try:
+            await _run_sync(self._client.attachment_simple, [filepath], item_key)
+        except zotero_errors.ResourceNotFoundError as e:
+            raise ZoteroNotFoundError("item", item_key) from e
+        except zotero_errors.UserNotAuthorisedError as e:
+            raise ZoteroError(
+                f"Not authorized to attach PDF to item '{item_key}'. "
+                "Hint: check that ZOTERO_API_KEY has write permissions."
+            ) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Failed to attach PDF to item '{item_key}': {e}. "
+                "Hint: verify web API credentials and connectivity."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error attaching PDF to item '{item_key}': "
+                f"{type(e).__name__}: {e}"
+            ) from e
 
     @webonly
     async def remove_from_collection(self, collection_key: str, item_key: str) -> None:
