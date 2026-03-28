@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -190,6 +190,17 @@ class Note(BaseModel):
     created: datetime
     modified: datetime
     tags: list[str] = Field(default_factory=list)
+
+
+class VerificationResult(BaseModel):
+    """Result of verifying quotes in a note against article fulltext."""
+
+    note_key: str
+    verified: bool
+    total_quotes: int
+    verified_quotes: int
+    failed_quotes: list[str] = Field(default_factory=list)
+    tag_added: Literal["verified", "unverified"]
 
 
 class ChunkInfoMixin(BaseModel):
@@ -467,4 +478,4 @@ class ZoteroSearchParams(BaseModel):
 
     def to_api_params(self) -> dict[str, Any]:
         """Convert to dict for pyzotero API calls, excluding None values."""
-        return {k: v for k, v in self.model_dump(by_alias=True, exclude_none=True).items()}
+        return dict(self.model_dump(by_alias=True, exclude_none=True))
