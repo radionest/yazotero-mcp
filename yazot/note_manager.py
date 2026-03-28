@@ -1,6 +1,7 @@
 import json
 from typing import TYPE_CHECKING, Any
 
+from .exceptions import ZoteroError
 from .formatters import (
     extract_note_text,
     format_dict_to_html,
@@ -54,6 +55,11 @@ class NoteManager:
         )
 
         created = await self.client.create_items([note_item])
+        if not created:
+            raise ZoteroError(
+                f"Failed to create note for item '{item_key}': API returned empty response. "
+                "Hint: verify the item key exists and web API credentials have write permissions."
+            )
         created_note = created[0]
 
         return Note(

@@ -99,3 +99,49 @@ class TestCollectionEndpoints:
 
         # Clean up
         await test_zotero_client.delete_collection_by_key(collection_data["key"])
+
+
+class TestAddItemsToCollection:
+    """E2E tests for add_items_to_collection MCP endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_add_items_to_collection(
+        self,
+        test_data_manager,
+        test_zotero_client: ZoteroClient,
+    ) -> None:
+        """Test adding existing items to a collection."""
+        from tests.test_helpers import ZoteroTestDataManager
+
+        manager: ZoteroTestDataManager = test_data_manager
+
+        # Create one item without collection
+        items = await manager.create_test_items(1)
+        item_key = items[0].key
+
+        # Create target collection
+        collection_keys = await manager.create_test_collections(1, name_prefix="AddTo Test")
+        collection_key = collection_keys[0]
+
+        # Add item to collection via MCP tool
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "add_items_to_collection",
+                arguments={
+                    "collection_key": collection_key,
+                    "item_keys": [item_key],
+                },
+            )
+
+        assert "Added 1 item(s)" in str(result.data)
+
+        # Verify item is in the collection
+        async with Client(mcp) as client:
+            coll_result = await client.call_tool(
+                "get_collection_items",
+                arguments={"collection_key": collection_key},
+            )
+            coll_items = coll_result.data
+
+        found_keys = {item.key for item in coll_items.items}
+        assert item_key in found_keys

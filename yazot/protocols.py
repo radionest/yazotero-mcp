@@ -174,3 +174,7 @@ class ZoteroClientProtocol(Protocol):
     async def add_to_collection(self, collection_key: str, items: list["ZoteroItem"]) -> None:
         """Add items to a collection."""
         ...
+
+    async def remove_from_collection(self, collection_key: str, item_key: str) -> None:
+        """Remove item from collection without deleting from library."""
+        ...
