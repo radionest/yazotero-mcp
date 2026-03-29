@@ -51,7 +51,7 @@ class TestSearchE2E:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "get_collection_items",
-                arguments={"collection_key": collection_key, "include_fulltext": True},
+                arguments={"collection_key": collection_key},
             )
             response = result.data
 
@@ -73,7 +73,7 @@ class TestSearchE2E:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "get_collection_items",
-                arguments={"collection_key": collection_key, "include_fulltext": True},
+                arguments={"collection_key": collection_key},
             )
             response = result.data
 
@@ -107,7 +107,7 @@ class TestSearchE2E:
         chunker = ResponseChunker(max_tokens=18000)
         response_json = json.dumps(
             {
-                "items": [item.model_dump() for item in response.items],
+                "items": [vars(item) for item in response.items],
                 "count": response.count,
                 "has_more": response.has_more,
                 "chunk_id": response.chunk_id,
@@ -151,7 +151,7 @@ class TestSearchE2E:
         chunker = ResponseChunker(max_tokens=18000)
         response_json = json.dumps(
             {
-                "items": [item.model_dump() for item in response.items],
+                "items": [vars(item) for item in response.items],
                 "count": response.count,
                 "has_more": response.has_more,
                 "chunk_id": response.chunk_id,
@@ -188,7 +188,7 @@ class TestSearchE2E:
             # Check first chunk
             response_json = json.dumps(
                 {
-                    "items": [item.model_dump() for item in response.items],
+                    "items": [vars(item) for item in response.items],
                     "count": response.count,
                     "has_more": response.has_more,
                     "chunk_id": response.chunk_id,
@@ -212,7 +212,7 @@ class TestSearchE2E:
                 # Check each chunk
                 response_json = json.dumps(
                     {
-                        "items": [item.model_dump() for item in response.items],
+                        "items": [vars(item) for item in response.items],
                         "count": response.count,
                         "has_more": response.has_more,
                         "chunk_id": response.chunk_id,

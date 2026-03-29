@@ -105,13 +105,16 @@ class TestTagsE2E:
     ) -> None:
         """Test creating note with tags through create_note_for_item endpoint."""
 
-        # Use first test item
-        collection = await test_zotero_client.get_collection(key=collection_key_items_with_tags)
-        assert collection is not None
-        item_key = collection.items.all()[0].key
         note_tags = ["test-note-tag", "automated"]
 
         async with Client(mcp) as client:
+            # Get first item from collection
+            items_result = await client.call_tool(
+                "get_collection_items",
+                arguments={"collection_key": collection_key_items_with_tags},
+            )
+            item_key = items_result.data.items[0].key
+
             result = await client.call_tool(
                 "create_note_for_item",
                 arguments={

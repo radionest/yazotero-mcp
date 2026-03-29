@@ -2,13 +2,14 @@
 
 import pytest
 from fastmcp import Client
+from fastmcp.exceptions import ToolError
 
+from tests.test_helpers import ZoteroTestDataManager
 from yazot.crossref_client import CrossrefClient, CrossrefWork
-from yazot.exceptions import DOINotFoundError, InvalidDOIError, ZoteroNotFoundError
+from yazot.exceptions import DOINotFoundError, InvalidDOIError
 from yazot.mcp_server import mcp
 from yazot.models import ItemCreate
 from yazot.zotero_client import ZoteroClient
-from tests.test_helpers import ZoteroTestDataManager
 
 
 class TestCrossrefClient:
@@ -232,7 +233,7 @@ class TestAddItemByDOI:
         invalid_doi = "not-a-valid-doi"
 
         async with Client(mcp) as client:
-            with pytest.raises(ZoteroNotFoundError):  # Should raise ZoteroNotFoundError
+            with pytest.raises(ToolError, match="DOI must start with"):
                 await client.call_tool(
                     "add_item_by_doi",
                     arguments={"doi": invalid_doi},

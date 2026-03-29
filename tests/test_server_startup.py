@@ -23,7 +23,7 @@ class TestMCPServerStartup:
     async def test_mcp_tools_registered(self) -> None:
         """Test that all required tools are registered."""
         # Get registered tool names
-        tool_names = [tool.name for tool in await mcp._list_tools()]
+        tool_names = list((await mcp.get_tools()).keys())
 
         # Verify all expected tools are registered
         expected_tools = [
@@ -41,7 +41,7 @@ class TestMCPServerStartup:
     async def test_mcp_resources_registered(self) -> None:
         """Test that all required resources are registered."""
         # Get registered resource URIs (convert to string for comparison)
-        resource_uris = [str(resource.uri) for resource in await mcp._list_resources()]
+        resource_uris = [str(r.uri) for r in (await mcp.get_resources()).values()]
 
         # Verify expected resources are registered
         expected_resources = [
@@ -57,7 +57,7 @@ class TestMCPServerStartup:
         """Test that server has correct metadata."""
         assert mcp.name == "zotero-mcp"
         # Verify tools have descriptions
-        tools = await mcp._list_tools()
+        tools = (await mcp.get_tools()).values()
         for tool in tools:
             assert tool.description, f"Tool {tool.name} has no description"
 
