@@ -18,6 +18,7 @@ from yazot.zotero_client import ZoteroClient
 
 if TYPE_CHECKING:
     from tests.test_helpers import ZoteroTestDataManager
+    from tests.zotero_instance import ZoteroInstance
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -244,7 +244,7 @@ class ZoteroInstance:
         """Check if the HTTP API is responding."""
         url = f"http://localhost:{self._port}/api/users/0/items?limit=1"
         try:
-            with urlopen(url, timeout=2) as resp:  # noqa: S310
+            with urlopen(url, timeout=2) as resp:
                 return resp.status == 200
         except (URLError, OSError):
             return False

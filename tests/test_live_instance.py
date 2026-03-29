@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from fastmcp import Client
+from fastmcp.exceptions import ToolError
 
 from yazot.mcp_server import mcp
 from yazot.models import ZoteroSearchParams
@@ -456,7 +457,7 @@ class TestDoiSearchAndCreate:
         _skip_without_web_credentials()
 
         async with Client(mcp) as client:
-            with pytest.raises(Exception):
+            with pytest.raises(ToolError):
                 await client.call_tool(
                     "add_item_by_doi",
                     arguments={"doi": "not-a-doi"},

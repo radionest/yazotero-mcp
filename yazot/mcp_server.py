@@ -37,7 +37,9 @@ logger = logging.getLogger(__name__)
 
 def _deps(ctx: Context) -> dict[str, Any]:
     """Get lifespan dependencies from request context."""
-    result: dict[str, Any] = ctx.request_context.lifespan_context
+    req_ctx = ctx.request_context
+    assert req_ctx is not None, "request_context is None — tool called outside MCP session"
+    result: dict[str, Any] = req_ctx.lifespan_context
     return result
 
 

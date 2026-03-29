@@ -3,9 +3,9 @@
 import pytest
 from fastmcp import Client
 
+from tests.test_helpers import ZoteroTestDataManager
 from yazot.mcp_server import mcp
 from yazot.zotero_client import ZoteroClient
-from tests.test_helpers import ZoteroTestDataManager
 
 
 class TestCollectionsResource:
