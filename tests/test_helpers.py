@@ -304,21 +304,22 @@ class ZoteroTestDataManager:
 
         return hierarchy
 
-    async def add_items_to_collection(self, items: list[ZoteroItem], collection_key: str) -> bool:
+    async def refresh_items(self, items: list[ZoteroItem]) -> list[ZoteroItem]:
+        """Re-fetch items from the server to get current versions.
+
+        After add_to_collection the server bumps the item version.
+        Subsequent operations need the fresh version to avoid 412 PreconditionFailed.
+        """
+        return [await self.client.get_item(item.key) for item in items]
+
+    async def add_items_to_collection(self, items: list[ZoteroItem], collection_key: str) -> None:
         """Add existing items to collection.
 
         Args:
-            items: List of item keys to add
+            items: List of items to add
             collection_key: Target collection key
-
-        Returns:
-            True if successful
         """
-        try:
-            await self.client.add_to_collection(collection_key, items)
-            return True
-        except Exception:
-            return False
+        await self.client.add_to_collection(collection_key, items)
 
     async def verify_item_count(self, collection_key: str, expected_count: int) -> bool:
         """Verify collection has expected number of items.

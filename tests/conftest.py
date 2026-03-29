@@ -154,6 +154,23 @@ async def test_collection_key() -> str:
     return os.getenv("TEST_COLLECTION_KEY", "TESTCOLL")
 
 
+@pytest.fixture(scope="session")
+async def item_with_pdf_key(
+    test_data_manager: "ZoteroTestDataManager",
+    test_zotero_client: ZoteroClient,
+) -> str:
+    """Create a test item with a real uploaded PDF and return its key.
+
+    Uses a small PDF from tests/fixtures/ so fulltext extraction tests
+    are self-contained and don't depend on pre-existing library data.
+    """
+    items = await test_data_manager.create_test_items(1)
+    item = items[0]
+    pdf_path = str(Path(__file__).parent / "fixtures" / "test_article.pdf")
+    await test_zotero_client.attach_pdf(item.key, pdf_path)
+    return item.key
+
+
 @pytest.fixture
 async def test_item_with_pdf(test_data_manager: "ZoteroTestDataManager") -> str:
     """Create test item with PDF attachment and return its key."""
@@ -662,8 +679,9 @@ async def collection_with_duplicate_items(
     # Create 5 unique items
     unique_items = await test_data_manager.create_test_items(5)
 
-    # Add 3 items to parent collection
+    # Add 3 items to parent collection, then refresh versions
     await test_data_manager.add_items_to_collection(unique_items[:3], parent_key)
+    unique_items = await test_data_manager.refresh_items(unique_items)
 
     # Create 2 subcollections
     sub_keys = await test_data_manager.create_test_collections(
@@ -673,6 +691,7 @@ async def collection_with_duplicate_items(
     # Add items to subcollections with overlap
     # Sub1: items 0, 1, 2, 3 (items 0,1,2 are duplicates from parent)
     await test_data_manager.add_items_to_collection(unique_items[:4], sub_keys[0])
+    unique_items = await test_data_manager.refresh_items(unique_items)
 
     # Sub2: items 2, 3, 4 (items 2,3 are duplicates)
     await test_data_manager.add_items_to_collection(unique_items[2:], sub_keys[1])

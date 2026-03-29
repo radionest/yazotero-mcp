@@ -50,6 +50,8 @@ class TestRemoveItemFromCollection:
         coll_keys = await test_data_manager.create_test_collections(2, name_prefix="Multi Coll")
         # Create item in first collection
         items = await test_data_manager.create_test_items(1, coll_keys[0])
+        # Refresh to get updated version after add_to_collection inside create_test_items
+        items = await test_data_manager.refresh_items(items)
         item_key = items[0].key
         # Add same item to second collection
         await test_data_manager.add_items_to_collection(items, coll_keys[1])
@@ -104,6 +106,7 @@ class TestRemoveItemFromLibrary:
         """from_library=True with collection_key should still delete from library."""
         coll_keys = await test_data_manager.create_test_collections(2, name_prefix="Override Coll")
         items = await test_data_manager.create_test_items(1, coll_keys[0])
+        items = await test_data_manager.refresh_items(items)
         item_key = items[0].key
         await test_data_manager.add_items_to_collection(items, coll_keys[1])
 
