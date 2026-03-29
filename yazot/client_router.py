@@ -275,6 +275,20 @@ class ZoteroClientRouter(ZoteroClientProtocol):
 
         return None
 
+    async def get_item_fulltext(self, item_key: str) -> str | None:
+        """Get fulltext (indexed API + PDF fallback) with local→web routing."""
+        try:
+            result = await self.read_client.get_item_fulltext(item_key)
+            if result:
+                return result
+        except Exception:
+            pass
+
+        if self._local_client and self._web_client:
+            return await self._web_client.get_item_fulltext(item_key)
+
+        return None
+
     async def search_items(self, search_params: "ZoteroSearchParams") -> list["ZoteroItem"]:
         """Search items across library (read operation with fallback)."""
         try:
