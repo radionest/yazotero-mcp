@@ -7,7 +7,6 @@ from fastmcp.exceptions import ToolError
 from tests.test_helpers import ZoteroTestDataManager
 from yazot.crossref_client import CrossrefClient, CrossrefWork
 from yazot.exceptions import DOINotFoundError, InvalidDOIError
-from yazot.mcp_server import mcp
 from yazot.models import ItemCreate
 from yazot.zotero_client import ZoteroClient
 
@@ -116,17 +115,17 @@ class TestAddItemByDOI:
         self,
         test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
+        mcp_client: Client,
     ) -> None:
         """Test adding an item using a valid DOI."""
         # Using a well-known, stable DOI
         doi = "10.1038/nature12373"
 
-        async with Client(mcp) as client:
-            result = await client.call_tool(
-                "add_item_by_doi",
-                arguments={"doi": doi},
-            )
-            item = result.data
+        result = await mcp_client.call_tool(
+            "add_item_by_doi",
+            arguments={"doi": doi},
+        )
+        item = result.data
 
         # Verify item was created
         assert item is not None
@@ -143,17 +142,17 @@ class TestAddItemByDOI:
         self,
         test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
+        mcp_client: Client,
     ) -> None:
         """Test adding an item with tags."""
         doi = "10.1038/nature12373"
         tags = ["important", "to-read", "genetics"]
 
-        async with Client(mcp) as client:
-            result = await client.call_tool(
-                "add_item_by_doi",
-                arguments={"doi": doi, "tags": tags},
-            )
-            item = result.data
+        result = await mcp_client.call_tool(
+            "add_item_by_doi",
+            arguments={"doi": doi, "tags": tags},
+        )
+        item = result.data
 
         # Verify item was created with tags
         assert item is not None
@@ -170,27 +169,26 @@ class TestAddItemByDOI:
         self,
         test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
+        mcp_client: Client,
     ) -> None:
         """Test adding an item to a specific collection."""
         # First create a test collection
-        async with Client(mcp) as client:
-            coll_result = await client.call_tool(
-                "create_collection",
-                arguments={"name": "Test DOI Collection"},
-            )
-            collection_data = coll_result.data
+        coll_result = await mcp_client.call_tool(
+            "create_collection",
+            arguments={"name": "Test DOI Collection"},
+        )
+        collection_data = coll_result.data
 
         # Add item to collection
         doi = "10.1038/nature12373"
-        async with Client(mcp) as client:
-            item_result = await client.call_tool(
-                "add_item_by_doi",
-                arguments={
-                    "doi": doi,
-                    "collection_key": collection_data["key"],
-                },
-            )
-            item = item_result.data
+        item_result = await mcp_client.call_tool(
+            "add_item_by_doi",
+            arguments={
+                "doi": doi,
+                "collection_key": collection_data["key"],
+            },
+        )
+        item = item_result.data
 
         # Verify item was added to collection
         assert item is not None
@@ -205,16 +203,16 @@ class TestAddItemByDOI:
         self,
         test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
+        mcp_client: Client,
     ) -> None:
         """Test that DOI URLs are properly handled."""
         doi_url = "https://doi.org/10.1038/nature12373"
 
-        async with Client(mcp) as client:
-            result = await client.call_tool(
-                "add_item_by_doi",
-                arguments={"doi": doi_url},
-            )
-            item = result.data
+        result = await mcp_client.call_tool(
+            "add_item_by_doi",
+            arguments={"doi": doi_url},
+        )
+        item = result.data
 
         # Verify item was created with clean DOI
         assert item is not None
@@ -228,13 +226,13 @@ class TestAddItemByDOI:
         self,
         test_data_manager: ZoteroTestDataManager,
         test_zotero_client: ZoteroClient,
+        mcp_client: Client,
     ) -> None:
         """Test that invalid DOI raises appropriate error."""
         invalid_doi = "not-a-valid-doi"
 
-        async with Client(mcp) as client:
-            with pytest.raises(ToolError, match="DOI must start with"):
-                await client.call_tool(
-                    "add_item_by_doi",
-                    arguments={"doi": invalid_doi},
-                )
+        with pytest.raises(ToolError, match="DOI must start with"):
+            await mcp_client.call_tool(
+                "add_item_by_doi",
+                arguments={"doi": invalid_doi},
+            )
