@@ -84,8 +84,7 @@ class TestNoteVerifier:
     @pytest.fixture
     def mock_client(self) -> AsyncMock:
         client = AsyncMock()
-        client.get_fulltext = AsyncMock(return_value=None)
-        client.get_pdf_text = AsyncMock(return_value=None)
+        client.get_item_fulltext = AsyncMock(return_value=None)
         client.get_raw_item = AsyncMock(return_value={"data": {"tags": []}})
         client.update_item = AsyncMock()
         return client
@@ -119,7 +118,7 @@ class TestNoteVerifier:
     ) -> None:
         note = self._make_note("Analysis\n> the results show significance\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = (
+        mock_client.get_item_fulltext.return_value = (
             "In this study, the results show significance in all experiments."
         )
 
@@ -141,7 +140,7 @@ class TestNoteVerifier:
     ) -> None:
         note = self._make_note("Analysis\n> this text does not exist\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = "Completely different article text."
+        mock_client.get_item_fulltext.return_value = "Completely different article text."
 
         result = await verifier.verify("NOTE0001")
 
@@ -176,8 +175,7 @@ class TestNoteVerifier:
     ) -> None:
         note = self._make_note("Analysis\n> some quote\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = None
-        mock_client.get_pdf_text.return_value = None
+        mock_client.get_item_fulltext.return_value = None
 
         result = await verifier.verify("NOTE0001")
 
@@ -194,8 +192,7 @@ class TestNoteVerifier:
     ) -> None:
         note = self._make_note("Analysis\n> found in pdf\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = None
-        mock_client.get_pdf_text.return_value = "This text was found in pdf extraction."
+        mock_client.get_item_fulltext.return_value = "This text was found in pdf extraction."
 
         result = await verifier.verify("NOTE0001")
 
@@ -212,7 +209,7 @@ class TestNoteVerifier:
         """Quotes with different whitespace/case should still match."""
         note = self._make_note("Analysis\n> The  Results   Show\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = "the results\nshow that..."
+        mock_client.get_item_fulltext.return_value = "the results\nshow that..."
 
         result = await verifier.verify("NOTE0001")
 
@@ -228,7 +225,7 @@ class TestNoteVerifier:
         """When some quotes match and some don't — unverified."""
         note = self._make_note("Notes\n> this exists in text\nAlso\n> this does not exist\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = "The article says this exists in text."
+        mock_client.get_item_fulltext.return_value = "The article says this exists in text."
 
         result = await verifier.verify("NOTE0001")
 
@@ -263,7 +260,7 @@ class TestNoteVerifier:
         """If note already has 'unverified', it should be replaced with 'verified'."""
         note = self._make_note("Analysis\n> exact quote\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = "The exact quote is here."
+        mock_client.get_item_fulltext.return_value = "The exact quote is here."
         mock_client.get_raw_item.return_value = {
             "data": {"tags": [{"tag": "unverified", "type": 1}]}
         }
@@ -287,7 +284,7 @@ class TestNoteVerifier:
         """Existing tags should be preserved when adding verified/unverified."""
         note = self._make_note("Analysis\n> exact quote\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = "The exact quote is here."
+        mock_client.get_item_fulltext.return_value = "The exact quote is here."
         mock_client.get_raw_item.return_value = {
             "data": {"tags": [{"tag": "important", "type": 0}, {"tag": "review", "type": 1}]}
         }
@@ -311,7 +308,7 @@ class TestNoteVerifier:
         """If tag already present and no opposite tag, no update_item call."""
         note = self._make_note("Analysis\n> exact quote\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = "The exact quote is here."
+        mock_client.get_item_fulltext.return_value = "The exact quote is here."
         mock_client.get_raw_item.return_value = {"data": {"tags": [{"tag": "verified", "type": 1}]}}
 
         result = await verifier.verify("NOTE0001")
@@ -329,7 +326,7 @@ class TestNoteVerifier:
         """If both tags present (anomalous state), removes opposite."""
         note = self._make_note("Analysis\n> exact quote\nEnd")
         mock_note_manager.get_note.return_value = note
-        mock_client.get_fulltext.return_value = "The exact quote is here."
+        mock_client.get_item_fulltext.return_value = "The exact quote is here."
         mock_client.get_raw_item.return_value = {
             "data": {
                 "tags": [
