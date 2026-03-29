@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -6,6 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 from fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
@@ -198,10 +200,28 @@ async def get_collection_items(
         raise ZoteroNotFoundError("collection", collection_key)
 
     async def collect_items_recursive(coll: ZoteroCollectionBase) -> list[ZoteroItem]:
-        items = await coll.get_items()
-        if include_subcollections:
-            for subcoll in await coll.get_subcollections():
-                items.extend(await collect_items_recursive(subcoll))
+        if not include_subcollections:
+            return await coll.get_items()
+
+        items, subcollections = await asyncio.gather(coll.get_items(), coll.get_subcollections())
+
+        if not subcollections:
+            return items
+
+        results = await asyncio.gather(
+            *(collect_items_recursive(sub) for sub in subcollections),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                if not isinstance(result, httpx.ConnectError | httpx.TimeoutException):
+                    raise result
+                logger.warning("Failed to fetch subcollection: %s", result)
+                continue
+            items.extend(result)
+
         return items
 
     # Collect items (with or without subcollections)

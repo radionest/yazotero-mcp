@@ -73,6 +73,7 @@ class ZoteroClientRouter(ZoteroClientProtocol):
                     zotero_library_id=self.settings.zotero_library_id,
                     zotero_api_key=self.settings.zotero_api_key,
                     zotero_library_type=self.settings.zotero_library_type,
+                    web_zotero_max_concurrent_requests=self.settings.web_zotero_max_concurrent_requests,
                 )
                 self._web_client = ZoteroClient(settings=web_settings)
             except ConfigurationError:
