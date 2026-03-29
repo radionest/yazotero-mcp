@@ -222,7 +222,7 @@ class TestWebApiWrite:
             )
             notes = notes_result.data
 
-        note_keys = [n["key"] for n in notes]
+        note_keys = [n.key for n in notes]
         assert note.key in note_keys
 
     async def test_create_collection_hierarchy(
@@ -261,9 +261,7 @@ class TestWebApiWrite:
                 sub_key = sub_data["key"]
 
             # Add items to the subcollection via test_data_manager.
-            sub_items = await test_data_manager.create_test_items(
-                count=3, collection_key=sub_key
-            )
+            sub_items = await test_data_manager.create_test_items(count=3, collection_key=sub_key)
             assert len(sub_items) == 3
 
             async with Client(mcp) as client:
