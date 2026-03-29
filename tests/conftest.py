@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 from dotenv import load_dotenv
-from fastmcp import Client, Context
+from fastmcp import Client
 
 from yazot.config import Settings
 from yazot.mcp_server import mcp
@@ -190,49 +190,6 @@ async def test_item_without_pdf(test_data_manager: "ZoteroTestDataManager") -> s
         template_type="journalArticle",
     )
     return items[0].key
-
-
-@pytest.fixture
-async def mcp_context(test_settings: Settings) -> Context:
-    """Create MCP context for tool testing with lifespan_context.
-
-    Sets up the request context var so ctx.request_context.lifespan_context
-    is available, matching the pattern used by the lifespan in production.
-    """
-    from mcp.server.fastmcp.server import RequestContext, request_ctx
-
-    from yazot.chunker import ResponseChunker, TextChunker
-    from yazot.client_router import ZoteroClientRouter
-    from yazot.crossref_client import CrossrefClient
-    from yazot.mcp_server import mcp as server
-    from yazot.note_manager import NoteManager
-
-    router = ZoteroClientRouter(test_settings)
-    crossref = CrossrefClient()
-    chunker = ResponseChunker(max_tokens=test_settings.max_chunk_size)
-    text_chunker = TextChunker(max_tokens=test_settings.max_chunk_size)
-    note_manager = NoteManager(router)
-
-    lifespan_context = {
-        "settings": test_settings,
-        "router": router,
-        "crossref": crossref,
-        "chunker": chunker,
-        "text_chunker": text_chunker,
-        "note_manager": note_manager,
-    }
-
-    # Set the request context var so ctx.request_context works
-    request_ctx.set(
-        RequestContext(
-            request_id="test-request",
-            meta=None,
-            session=None,  # type: ignore[arg-type]
-            lifespan_context=lifespan_context,
-        )
-    )
-
-    return Context(server)
 
 
 # WORKAROUND: FastMCP lifespan cleanup bug
