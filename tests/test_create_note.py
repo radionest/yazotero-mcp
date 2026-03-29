@@ -246,7 +246,7 @@ class TestCreateNoteEndpoint:
     async def test_note_parent_relationship(
         self,
         test_item_for_note: str,
-        test_zotero_client: ZoteroClient,
+        fresh_zotero_client: ZoteroClient,
     ) -> None:
         """Test that note is correctly linked to parent item."""
 
@@ -265,7 +265,8 @@ class TestCreateNoteEndpoint:
         assert note.parent_key == test_item_for_note
 
         # Verify note appears as child of parent item
-        children = await test_zotero_client.get_children(test_item_for_note)
+        # Use fresh client to avoid stale HTTP cache from session-scoped client
+        children = await fresh_zotero_client.get_children(test_item_for_note)
         note_keys = [child.key for child in children if child.item_type == "note"]
         assert note.key in note_keys
 
@@ -299,7 +300,7 @@ class TestCreateNoteEndpoint:
     async def test_multiple_notes_for_same_item(
         self,
         test_item_for_note: str,
-        test_zotero_client: ZoteroClient,
+        fresh_zotero_client: ZoteroClient,
     ) -> None:
         """Test creating multiple notes for the same item."""
 
@@ -324,7 +325,8 @@ class TestCreateNoteEndpoint:
         assert len(set(created_keys)) == note_count  # All keys are unique
 
         # Verify all notes are children of the item
-        children = await test_zotero_client.get_children(test_item_for_note)
+        # Use fresh client to avoid stale HTTP cache from session-scoped client
+        children = await fresh_zotero_client.get_children(test_item_for_note)
         child_note_keys = [child.key for child in children if child.item_type == "note"]
         for key in created_keys:
             assert key in child_note_keys

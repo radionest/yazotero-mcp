@@ -129,6 +129,25 @@ async def test_zotero_client(test_settings: Settings) -> AsyncGenerator[ZoteroCl
 
 
 @pytest.fixture
+async def fresh_zotero_client(test_settings: Settings) -> ZoteroClient:
+    """Per-test web client without HTTP cache from prior requests.
+
+    Use for read-after-write verification when the write was done by a
+    different client (e.g. MCP lifespan) and the session-scoped
+    test_zotero_client may return stale cached responses (e.g. get_children).
+    """
+    return ZoteroClient(
+        Settings(
+            zotero_local=False,
+            zotero_library_id=test_settings.zotero_library_id,
+            zotero_api_key=test_settings.zotero_api_key,
+            zotero_library_type=test_settings.zotero_library_type,
+            max_chunk_size=test_settings.max_chunk_size,
+        )
+    )
+
+
+@pytest.fixture
 async def test_collection_key() -> str:
     """Key of test collection with sample data."""
     # This should be created once in your test Zotero account
