@@ -129,10 +129,46 @@ async def test_zotero_client(test_settings: Settings) -> AsyncGenerator[ZoteroCl
 
 
 @pytest.fixture
+async def fresh_zotero_client(test_settings: Settings) -> ZoteroClient:
+    """Per-test web client without HTTP cache from prior requests.
+
+    Use for read-after-write verification when the write was done by a
+    different client (e.g. MCP lifespan) and the session-scoped
+    test_zotero_client may return stale cached responses (e.g. get_children).
+    """
+    return ZoteroClient(
+        Settings(
+            zotero_local=False,
+            zotero_library_id=test_settings.zotero_library_id,
+            zotero_api_key=test_settings.zotero_api_key,
+            zotero_library_type=test_settings.zotero_library_type,
+            max_chunk_size=test_settings.max_chunk_size,
+        )
+    )
+
+
+@pytest.fixture
 async def test_collection_key() -> str:
     """Key of test collection with sample data."""
     # This should be created once in your test Zotero account
     return os.getenv("TEST_COLLECTION_KEY", "TESTCOLL")
+
+
+@pytest.fixture(scope="session")
+async def item_with_pdf_key(
+    test_data_manager: "ZoteroTestDataManager",
+    test_zotero_client: ZoteroClient,
+) -> str:
+    """Create a test item with a real uploaded PDF and return its key.
+
+    Uses a small PDF from tests/fixtures/ so fulltext extraction tests
+    are self-contained and don't depend on pre-existing library data.
+    """
+    items = await test_data_manager.create_test_items(1)
+    item = items[0]
+    pdf_path = str(Path(__file__).parent / "fixtures" / "test_article.pdf")
+    await test_zotero_client.attach_pdf(item.key, pdf_path)
+    return item.key
 
 
 @pytest.fixture
@@ -643,8 +679,9 @@ async def collection_with_duplicate_items(
     # Create 5 unique items
     unique_items = await test_data_manager.create_test_items(5)
 
-    # Add 3 items to parent collection
+    # Add 3 items to parent collection, then refresh versions
     await test_data_manager.add_items_to_collection(unique_items[:3], parent_key)
+    unique_items = await test_data_manager.refresh_items(unique_items)
 
     # Create 2 subcollections
     sub_keys = await test_data_manager.create_test_collections(
@@ -654,6 +691,7 @@ async def collection_with_duplicate_items(
     # Add items to subcollections with overlap
     # Sub1: items 0, 1, 2, 3 (items 0,1,2 are duplicates from parent)
     await test_data_manager.add_items_to_collection(unique_items[:4], sub_keys[0])
+    unique_items = await test_data_manager.refresh_items(unique_items)
 
     # Sub2: items 2, 3, 4 (items 2,3 are duplicates)
     await test_data_manager.add_items_to_collection(unique_items[2:], sub_keys[1])

@@ -369,7 +369,6 @@ class TestDoiSearchAndCreate:
                 assert collection_data["key"]
                 collection_key = collection_data["key"]
 
-            async with Client(mcp) as client:
                 item_result = await client.call_tool(
                     "add_item_by_doi",
                     arguments={"doi": _DOI, "collection_key": collection_key},
