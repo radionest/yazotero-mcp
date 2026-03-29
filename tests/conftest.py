@@ -9,9 +9,10 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 from dotenv import load_dotenv
-from fastmcp import Context
+from fastmcp import Client, Context
 
 from yazot.config import Settings
+from yazot.mcp_server import mcp
 from yazot.models import ZoteroItem
 from yazot.zotero_client import ZoteroClient
 
@@ -195,6 +196,27 @@ async def mcp_context(test_settings: Settings) -> Context:
     )
 
     return Context(server)
+
+
+# WORKAROUND: FastMCP lifespan cleanup bug
+# FastMCP 2.x (and 3.x) never resets _lifespan_result_set after Client
+# disconnects because the cleanup code in _lifespan_manager() is unreachable
+# due to anyio task group cancellation.  This causes subsequent Client(mcp)
+# sessions to reuse stale lifespan context with already-closed resources.
+# Reproduction & details: ~/Projects/fastmcp-lifespan-issue/
+# TODO: remove when FastMCP fixes _lifespan_manager() cleanup
+@pytest.fixture(autouse=True)
+def _reset_mcp_lifespan() -> None:
+    """Force FastMCP to create a fresh lifespan on each test."""
+    mcp._lifespan_result_set = False
+    mcp._lifespan_result = None
+
+
+@pytest.fixture
+async def mcp_client() -> AsyncGenerator[Client, None]:
+    """Per-test MCP client — all tool calls in one test go through this."""
+    async with Client(mcp) as client:
+        yield client
 
 
 @pytest.fixture(scope="function")
