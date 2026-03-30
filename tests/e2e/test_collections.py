@@ -111,7 +111,7 @@ class TestAddItemsToCollection:
         test_zotero_client: ZoteroClient,
     ) -> None:
         """Test adding existing items to a collection."""
-        from tests.test_helpers import ZoteroTestDataManager
+        from tests.e2e.test_helpers import ZoteroTestDataManager
 
         manager: ZoteroTestDataManager = test_data_manager
 

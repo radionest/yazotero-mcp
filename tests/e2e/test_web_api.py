@@ -1,4 +1,4 @@
-"""Integration tests against live local Zotero instance and real web API."""
+"""End-to-end write tests against real web API."""
 
 import contextlib
 import os
@@ -9,17 +9,10 @@ from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
 from yazot.mcp_server import mcp
-from yazot.models import ZoteroSearchParams
 from yazot.zotero_client import ZoteroClient
 
 if TYPE_CHECKING:
-    from tests.test_helpers import ZoteroTestDataManager
-    from tests.zotero_instance import ZoteroInstance
-
-
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
+    from tests.e2e.test_helpers import ZoteroTestDataManager
 
 
 def _skip_without_web_credentials() -> None:
@@ -27,112 +20,8 @@ def _skip_without_web_credentials() -> None:
         pytest.skip("Web API credentials not available")
 
 
-# ---------------------------------------------------------------------------
-# Class 1: TestLocalInstanceRead
-# ---------------------------------------------------------------------------
-
-
-class TestLocalInstanceRead:
-    """Tests that exercise ZoteroClient against a live local Zotero process.
-
-    Every test skips when ZOTERO_TEST_INSTANCE is not enabled (fixture yields None).
-    """
-
-    def test_instance_health_check(
-        self,
-        zotero_test_environment: "ZoteroInstance | None",
-    ) -> None:
-        """Verify the provisioned Zotero process responds to HTTP health checks."""
-        if zotero_test_environment is None:
-            pytest.skip("Live Zotero instance not enabled")
-
-        assert zotero_test_environment.health_check() is True
-
-    def test_client_connects_with_custom_port(
-        self,
-        zotero_test_environment: "ZoteroInstance | None",
-        local_live_client: ZoteroClient | None,
-    ) -> None:
-        """ZoteroClient created for the live instance uses local mode and correct port.
-
-        NOTE: Accesses private _client.endpoint to verify port configuration.
-        """
-        if zotero_test_environment is None or local_live_client is None:
-            pytest.skip("Live Zotero instance not enabled")
-
-        assert local_live_client.mode == "local"
-        assert str(zotero_test_environment.port) in local_live_client._client.endpoint
-
-    async def test_get_items_returns_list(
-        self,
-        zotero_test_environment: "ZoteroInstance | None",
-        local_live_client: ZoteroClient | None,
-    ) -> None:
-        """get_items() against the live local instance returns a list."""
-        if zotero_test_environment is None or local_live_client is None:
-            pytest.skip("Live Zotero instance not enabled")
-
-        items = await local_live_client.get_items()
-        assert isinstance(items, list)
-
-    async def test_get_collections_returns_list(
-        self,
-        zotero_test_environment: "ZoteroInstance | None",
-        local_live_client: ZoteroClient | None,
-    ) -> None:
-        """get_collections() against the live local instance returns a list."""
-        if zotero_test_environment is None or local_live_client is None:
-            pytest.skip("Live Zotero instance not enabled")
-
-        collections = await local_live_client.get_collections()
-        assert isinstance(collections, list)
-
-    async def test_search_items_returns_list(
-        self,
-        zotero_test_environment: "ZoteroInstance | None",
-        local_live_client: ZoteroClient | None,
-    ) -> None:
-        """search_items() with empty params against live local instance returns a list."""
-        if zotero_test_environment is None or local_live_client is None:
-            pytest.skip("Live Zotero instance not enabled")
-
-        items = await local_live_client.search_items(ZoteroSearchParams())
-        assert isinstance(items, list)
-
-    async def test_mcp_search_via_local_instance(
-        self,
-        zotero_test_environment: "ZoteroInstance | None",
-        local_live_client: ZoteroClient | None,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """MCP search_articles tool works when env vars point to the live local instance."""
-        if zotero_test_environment is None or local_live_client is None:
-            pytest.skip("Live Zotero instance not enabled")
-
-        port = zotero_test_environment.port
-        monkeypatch.setenv("ZOTERO_LOCAL", "true")
-        monkeypatch.setenv("ZOTERO_PORT", str(port))
-        monkeypatch.setenv("ZOTERO_LIBRARY_ID", "0")
-        monkeypatch.setenv("ZOTERO_API_KEY", "")
-
-        async with Client(mcp) as client:
-            result = await client.call_tool("search_articles", arguments={"search_params": {}})
-            response = result.data
-
-        assert isinstance(response.items, list)
-        assert response.count >= 0
-
-
-# ---------------------------------------------------------------------------
-# Class 2: TestWebApiWrite
-# ---------------------------------------------------------------------------
-
-
 class TestWebApiWrite:
-    """End-to-end write tests that exercise the Zotero web API via MCP tools.
-
-    Every test skips when TEST_ZOTERO_LIBRARY_ID / TEST_ZOTERO_API_KEY are absent.
-    """
+    """End-to-end write tests that exercise the Zotero web API via MCP tools."""
 
     async def test_create_and_search_items(
         self,
@@ -145,7 +34,6 @@ class TestWebApiWrite:
         items = await test_data_manager.create_test_items(count=3, template_type="journalArticle")
         assert len(items) == 3
 
-        # Use the title fragment of the first item as the search query.
         title_fragment = items[0].data.title.split()[0]
 
         async with Client(mcp) as client:
@@ -260,7 +148,6 @@ class TestWebApiWrite:
                 assert sub_data["key"]
                 sub_key = sub_data["key"]
 
-            # Add items to the subcollection via test_data_manager.
             sub_items = await test_data_manager.create_test_items(count=3, collection_key=sub_key)
             assert len(sub_items) == 3
 
@@ -309,18 +196,11 @@ class TestWebApiWrite:
             assert item.data.itemType == "journalArticle"
 
 
-# ---------------------------------------------------------------------------
-# Class 3: TestDoiSearchAndCreate
-# ---------------------------------------------------------------------------
-
 _DOI = "10.1038/nature12373"
 
 
 class TestDoiSearchAndCreate:
-    """End-to-end tests for the add_item_by_doi MCP tool.
-
-    Every test skips when TEST_ZOTERO_LIBRARY_ID / TEST_ZOTERO_API_KEY are absent.
-    """
+    """End-to-end tests for the add_item_by_doi MCP tool."""
 
     async def test_add_by_doi_returns_item(
         self,
@@ -429,8 +309,6 @@ class TestDoiSearchAndCreate:
                 )
                 item = result.data
 
-            # Search using a unique title fragment — "Nanometre" is specific enough
-            # to target only this DOI item in the library.
             async with Client(mcp) as client:
                 search_result = await client.call_tool(
                     "search_articles",
