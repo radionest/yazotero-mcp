@@ -1,10 +1,13 @@
 """Tests against live local Zotero instance."""
 
+import os
 from typing import TYPE_CHECKING
 
 import pytest
 from fastmcp import Client
+from pyzotero import zotero
 
+from yazot.config import Settings
 from yazot.mcp_server import mcp
 from yazot.models import ZoteroSearchParams
 from yazot.zotero_client import ZoteroClient
@@ -99,3 +102,25 @@ class TestLocalInstanceRead:
 
         assert isinstance(response.items, list)
         assert response.count >= 0
+
+
+class TestLocalConnectionSmoke:
+    """Smoke test for local Zotero client creation."""
+
+    def test_real_local_connection(self) -> None:
+        """Test connection to local Zotero server (if available)."""
+        if os.getenv("TEST_ZOTERO_LOCAL", "false").lower() != "true":
+            pytest.skip("Local Zotero not configured")
+
+        local_settings = Settings(
+            zotero_local=True,
+            zotero_library_id="",
+            zotero_api_key=None,
+        )
+
+        client = ZoteroClient(local_settings)
+
+        assert client.mode == "local"
+        assert isinstance(client._client, zotero.Zotero)
+        assert client._client.local is True
+        assert client._client.endpoint == "http://localhost:23119/api"
