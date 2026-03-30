@@ -187,9 +187,7 @@ class ZoteroInstance:
         """Start Zotero instance. Raises RuntimeError on failure."""
         self._validate_binaries()
 
-        self._profile_dir = Path(
-            tempfile.mkdtemp(prefix=f"yazot-test-{self._port}-")
-        )
+        self._profile_dir = Path(tempfile.mkdtemp(prefix=f"yazot-test-{self._port}-"))
 
         # Write prefs.js
         prefs = ZoteroPrefs(port=self._port)
@@ -216,8 +214,7 @@ class ZoteroInstance:
         if not self._wait_for_ready():
             self.stop()
             raise RuntimeError(
-                f"Zotero failed to start on port {self._port} "
-                f"within {self._startup_timeout}s"
+                f"Zotero failed to start on port {self._port} " f"within {self._startup_timeout}s"
             )
 
         logger.info(
@@ -254,23 +251,23 @@ class ZoteroInstance:
         if not (self._zotero_bin.exists() or shutil.which(str(self._zotero_bin))):
             raise RuntimeError(f"Zotero binary not found: {self._zotero_bin}")
         if self._use_xvfb and not shutil.which("xvfb-run"):
-            raise RuntimeError(
-                "xvfb-run not found. Install xvfb package or set DISPLAY."
-            )
+            raise RuntimeError("xvfb-run not found. Install xvfb package or set DISPLAY.")
 
     def _build_command(self) -> list[str]:
         """Build the command line for launching Zotero."""
         cmd: list[str] = []
         if self._use_xvfb:
             cmd.extend(["xvfb-run", "-a"])
-        cmd.extend([
-            str(self._zotero_bin),
-            "-profile",
-            str(self._profile_dir),
-            "-no-remote",
-            "-datadir",
-            "profile",
-        ])
+        cmd.extend(
+            [
+                str(self._zotero_bin),
+                "-profile",
+                str(self._profile_dir),
+                "-no-remote",
+                "-datadir",
+                "profile",
+            ]
+        )
         return cmd
 
     def _wait_for_ready(self) -> bool:
@@ -333,9 +330,7 @@ class ZoteroInstancePool:
         """Acquire a running instance. Raises RuntimeError if pool exhausted."""
         if not self._available_ports:
             active_ports = sorted(self._active.keys())
-            raise RuntimeError(
-                f"All ports in the pool are in use: {active_ports}"
-            )
+            raise RuntimeError(f"All ports in the pool are in use: {active_ports}")
 
         port = self._available_ports.pop(0)
         instance = ZoteroInstance(
@@ -395,7 +390,6 @@ def detect_xvfb_needed() -> bool:
         return False
     if not shutil.which("xvfb-run"):
         raise RuntimeError(
-            "No DISPLAY set and xvfb-run not found. "
-            "Install xvfb or run with a display server."
+            "No DISPLAY set and xvfb-run not found. " "Install xvfb or run with a display server."
         )
     return True

@@ -52,13 +52,21 @@ uv sync --group dev
 # Run server
 uv run python -m yazot.mcp_server
 
-# Fast unit tests (no live Zotero needed)
-uv run pytest tests/test_formatters.py tests/test_response_chunker.py tests/test_text_chunker.py tests/test_client_router.py -q
+# Unit tests (no live Zotero needed, parallelizable)
+uv run pytest tests/unit/ -q
+uv run pytest tests/unit/ -n auto -q           # parallel via xdist
 
-# All tests (some require running Zotero + API key)
+# E2E tests (requires TEST_ZOTERO_API_KEY)
+uv run pytest tests/e2e/ -q
+
+# External API tests (real Crossref calls)
+uv run pytest tests/external/ -q
+
+# All tests
 uv run pytest
-uv run pytest tests/test_formatters.py -v     # specific file
+uv run pytest tests/unit/test_formatters.py -v # specific file
 uv run pytest -k "test_search" -v              # by name
+uv run pytest -m unit -q                       # by marker
 
 # Linters (pre-commit: black, ruff, mypy) — run sequentially, not in parallel
 uv run ruff check yazot/ tests/

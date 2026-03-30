@@ -58,9 +58,7 @@ class TestUnpaywallClient:
 
         assert url == "https://example.com/paper.pdf"
 
-    async def test_find_pdf_url_fallback_to_oa_locations(
-        self, client: UnpaywallClient
-    ) -> None:
+    async def test_find_pdf_url_fallback_to_oa_locations(self, client: UnpaywallClient) -> None:
         response_data = {
             "doi": "10.1234/test",
             "is_oa": True,
@@ -267,7 +265,10 @@ class TestFulltextResolver:
         resolver = FulltextResolver(settings_all)
         assert resolver._unpaywall is not None
         with patch.object(
-            resolver._unpaywall, "find_pdf_url", new_callable=AsyncMock, return_value="https://pdf.com/a.pdf"
+            resolver._unpaywall,
+            "find_pdf_url",
+            new_callable=AsyncMock,
+            return_value="https://pdf.com/a.pdf",
         ):
             url, source = await resolver.resolve("10.1234/test", "Test Title")
 
@@ -283,7 +284,10 @@ class TestFulltextResolver:
                 resolver._unpaywall, "find_pdf_url", new_callable=AsyncMock, return_value=None
             ),
             patch.object(
-                resolver._core, "find_pdf_url", new_callable=AsyncMock, return_value="https://core.ac.uk/pdf.pdf"
+                resolver._core,
+                "find_pdf_url",
+                new_callable=AsyncMock,
+                return_value="https://core.ac.uk/pdf.pdf",
             ),
         ):
             url, source = await resolver.resolve("10.1234/test", "Test Title")
@@ -300,11 +304,12 @@ class TestFulltextResolver:
             patch.object(
                 resolver._unpaywall, "find_pdf_url", new_callable=AsyncMock, return_value=None
             ),
+            patch.object(resolver._core, "find_pdf_url", new_callable=AsyncMock, return_value=None),
             patch.object(
-                resolver._core, "find_pdf_url", new_callable=AsyncMock, return_value=None
-            ),
-            patch.object(
-                resolver._libgen, "find_pdf_url", new_callable=AsyncMock, return_value="https://libgen.is/get.php?md5=abc"
+                resolver._libgen,
+                "find_pdf_url",
+                new_callable=AsyncMock,
+                return_value="https://libgen.is/get.php?md5=abc",
             ),
         ):
             url, source = await resolver.resolve("10.1234/test", "Test Title")
@@ -321,9 +326,7 @@ class TestFulltextResolver:
             patch.object(
                 resolver._unpaywall, "find_pdf_url", new_callable=AsyncMock, return_value=None
             ),
-            patch.object(
-                resolver._core, "find_pdf_url", new_callable=AsyncMock, return_value=None
-            ),
+            patch.object(resolver._core, "find_pdf_url", new_callable=AsyncMock, return_value=None),
             patch.object(
                 resolver._libgen, "find_pdf_url", new_callable=AsyncMock, return_value=None
             ),
@@ -354,9 +357,7 @@ class TestFulltextResolver:
 
         assert source == "core"
 
-    async def test_cascade_no_doi_skips_unpaywall(
-        self, settings_all: Settings
-    ) -> None:
+    async def test_cascade_no_doi_skips_unpaywall(self, settings_all: Settings) -> None:
         resolver = FulltextResolver(settings_all)
         assert resolver._core is not None
         with patch.object(
@@ -393,9 +394,7 @@ class TestFulltextResolver:
         )
 
         with (
-            patch.object(
-                resolver._http, "get", new_callable=AsyncMock, return_value=mock_response
-            ),
+            patch.object(resolver._http, "get", new_callable=AsyncMock, return_value=mock_response),
             pytest.raises(FulltextDownloadError, match="content-type"),
         ):
             await resolver.download("https://example.com/not-a-pdf")
@@ -408,9 +407,7 @@ class TestFulltextResolver:
         )
 
         with (
-            patch.object(
-                resolver._http, "get", new_callable=AsyncMock, return_value=mock_response
-            ),
+            patch.object(resolver._http, "get", new_callable=AsyncMock, return_value=mock_response),
             pytest.raises(FulltextDownloadError, match="Empty response body"),
         ):
             await resolver.download("https://example.com/empty.pdf")
@@ -420,9 +417,7 @@ class TestFulltextResolver:
         mock_response = make_httpx_response(status_code=403)
 
         with (
-            patch.object(
-                resolver._http, "get", new_callable=AsyncMock, return_value=mock_response
-            ),
+            patch.object(resolver._http, "get", new_callable=AsyncMock, return_value=mock_response),
             pytest.raises(FulltextDownloadError, match="HTTP 403"),
         ):
             await resolver.download("https://example.com/forbidden.pdf")
