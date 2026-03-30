@@ -75,8 +75,8 @@ pre-commit run --all-files
 
 - Feature development: always enter a worktree via `EnterWorktree` before making changes
 - Quick fixes, typos, config changes — work directly in main, no worktree needed
-- To resume work in an existing worktree — use `EnterWorktree` with the same name. Never `cd` into worktree path directly
-- Worktrees contain only git-tracked files. `hooks/`, `settings.json`, `settings.local.json` live in `$CLAUDE_PROJECT_DIR/.claude/` and are shared — edit them by the main project path
+- To resume work in an existing worktree — use `EnterWorktree` with the same name. Never `cd` into the worktree path directly
+- Worktrees contain only git-tracked files. `hooks/`, `settings.json`, `settings.local.json` live in `$CLAUDE_PROJECT_DIR/.claude/` and are shared — edit them from the main project path
 - `ExitWorktree(remove)` requires `discard_changes=true` if there are commits not in main (even if already pushed)
 - The Stop hook blocks session end in a worktree — ask the user to choose:
   1. **Push + PR**: commit all, `git push -u origin <branch>`, `gh pr create`, then `ExitWorktree(remove, discard_changes=true)`

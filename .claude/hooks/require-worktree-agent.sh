@@ -5,13 +5,15 @@
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
 BRANCH=$(git branch --show-current 2>/dev/null)
-[ "$BRANCH" != "main" ] && [ "$BRANCH" != "master" ] && exit 0
+DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
+[ "$BRANCH" != "$DEFAULT_BRANCH" ] && exit 0
 
 # Read tool input from stdin
 INPUT=$(cat)
 
-# Extract subagent_type (grep -oP: Perl regex, \K resets match start)
-SUBAGENT=$(echo "$INPUT" | grep -oP '"subagent_type"\s*:\s*"\K[^"]*' || true)
+# Extract subagent_type
+SUBAGENT=$(echo "$INPUT" | sed -n 's/.*"subagent_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 
 # Block development agents on main (Explore is read-only — allowed)
 case "$SUBAGENT" in

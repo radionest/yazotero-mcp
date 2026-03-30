@@ -7,7 +7,7 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
 # Пропускаем файлы вне репозитория (plan-файлы, глобальный .claude/ и т.д.)
 INPUT=$(cat)
-FILE_PATH=$(echo "$INPUT" | grep -oP '"file_path"\s*:\s*"\K[^"]*' || true)
+FILE_PATH=$(echo "$INPUT" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 if [ -n "$FILE_PATH" ]; then
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
   case "$FILE_PATH" in
@@ -17,8 +17,10 @@ if [ -n "$FILE_PATH" ]; then
 fi
 
 BRANCH=$(git branch --show-current 2>/dev/null)
+DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 
-if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
+if [ "$BRANCH" = "$DEFAULT_BRANCH" ]; then
   cat >&2 <<'EOF'
 BLOCKED: Редактирование файлов на ветке main запрещено.
 Войди в worktree через EnterWorktree перед внесением изменений.

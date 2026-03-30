@@ -22,7 +22,9 @@ fi
 # Собираем информацию о состоянии
 BRANCH=$(git branch --show-current 2>/dev/null)
 HAS_CHANGES=$(git status --porcelain 2>/dev/null | head -1)
-AHEAD=$(git rev-list main..HEAD --count 2>/dev/null || echo "0")
+DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
+AHEAD=$(git rev-list "$DEFAULT_BRANCH"..HEAD --count 2>/dev/null || echo "0")
 
 # Блокируем stop — stderr покажется Claude
 cat >&2 <<EOF

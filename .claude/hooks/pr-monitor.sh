@@ -8,14 +8,14 @@ INPUT=$(cat)
 # Quick exit: not a gh pr create command
 echo "$INPUT" | grep -q "gh pr create" || exit 0
 
-# Exclude dry-run, help, and list commands
-echo "$INPUT" | grep -qE "(--help|--dry-run|gh pr create\b.*\blist)" && exit 0
+# Exclude dry-run and help commands
+echo "$INPUT" | grep -qE "(--help|--dry-run)" && exit 0
 
 # Extract PR URL from output
-PR_URL=$(echo "$INPUT" | grep -oP 'https://github\.com/[^"]+/pull/\d+' | head -1)
+PR_URL=$(echo "$INPUT" | grep -oE 'https://github\.com/[^"]+/pull/[0-9]+' | head -1)
 [ -z "$PR_URL" ] && exit 0
 
-PR_NUM=$(echo "$PR_URL" | grep -oP '\d+$')
+PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
 REPORT="/tmp/pr-${PR_NUM}-report.md"
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 
