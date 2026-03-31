@@ -6,8 +6,8 @@ WARNING: This will delete ALL items and collections in your library!
 
 import sys
 
-from yazot.zotero_client import ZoteroClient
 from tests.test_helpers import ZoteroTestDataManager
+from yazot.zotero_client import ZoteroClient
 
 
 def main() -> None:

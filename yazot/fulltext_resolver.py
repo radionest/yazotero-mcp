@@ -159,7 +159,7 @@ class LibgenClient:
             if isinstance(href, str) and "md5=" in href:
                 # Extract MD5 and build direct download URL
                 md5_start = href.index("md5=") + 4
-                md5 = href[md5_start:md5_start + 32]
+                md5 = href[md5_start : md5_start + 32]
                 if len(md5) == 32:
                     return f"{self.mirror}/get.php?md5={md5}"
         return None

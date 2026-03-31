@@ -301,7 +301,8 @@ Final conclusions.
         """Test chunking with unicode and special characters."""
         chunker = TextChunker(max_tokens=100)
 
-        text = """
+        text = (
+            """
         Тестовый текст на русском языке.
 
         中文测试文本。
@@ -313,7 +314,9 @@ Final conclusions.
         Math: ∑∫∂∇⊕⊗
 
         Emoji: 🔬📊📈🧬
-        """ * 50  # noqa: RUF001  # Repeat to make it need chunking
+        """
+            * 50
+        )  # Repeat to make it need chunking
 
         result = chunker.chunk_text(text, "UNICODE")
 

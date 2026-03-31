@@ -18,7 +18,7 @@ CLAUDE.md has the full tech stack, architecture, and conventions — follow them
 3. **Verify** — run linters and tests after changes:
    ```
    uv run ruff check yazot/ tests/
-   uv run black --check yazot/ tests/
+   uv run ruff format --check yazot/ tests/
    uv run mypy yazot/
    uv run pytest -x -q
    ```
