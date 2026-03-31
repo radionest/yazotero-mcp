@@ -97,7 +97,7 @@ class TestLocalInstanceRead:
         monkeypatch.setenv("ZOTERO_API_KEY", "")
 
         async with Client(mcp) as client:
-            result = await client.call_tool("search_articles", arguments={"search_params": {}})
+            result = await client.call_tool("search_articles", arguments={})
             response = result.data
 
         assert isinstance(response.items, list)

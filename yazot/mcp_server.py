@@ -237,23 +237,16 @@ async def get_next_chunk(chunk_id: str, ctx: Context) -> SearchCollectionRespons
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def search_articles(
-    search_params: ZoteroSearchParams,
     ctx: Context,
+    query: str | None = None,
+    tags: list[str] | None = None,
     collection_key: str | None = None,
+    item_type: str | None = None,
 ) -> SearchCollectionResponse:
     """
     Search for articles by name, tags, collections, or item type.
 
     Supports flexible searching across your Zotero library with multiple filter options.
-
-    Args:
-        query: Quick search string to match against titles and creators (optional)
-        tags: List of tags to filter by - items must have ALL listed tags (optional)
-        collection_key: Filter by specific collection key (optional)
-        item_type: Filter by item type (e.g., 'journalArticle', 'book', 'conferencePaper') (optional)
-
-    Returns:
-        SearchCollectionResponse with matching items
 
     Note:
         To get full text content for an item, use the separate 'get_item_fulltext' tool.
@@ -278,6 +271,7 @@ async def search_articles(
         # Combine filters
         search_articles(query="neural networks", tags=["AI"], item_type="journalArticle")
     """
+    search_params = ZoteroSearchParams(q=query, tag=tags, item_type=item_type)
     router: ZoteroClientRouter = _deps(ctx)["router"]
     chunker: ResponseChunker = _deps(ctx)["chunker"]
 

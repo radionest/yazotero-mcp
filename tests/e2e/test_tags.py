@@ -60,7 +60,7 @@ class TestTagsE2E:
 
         async with Client(mcp) as client:
             result = await client.call_tool(
-                "search_articles", arguments={"search_params": {"tag": [search_tag]}}
+                "search_articles", arguments={"tags": [search_tag]}
             )
             response = result.data
 
@@ -85,7 +85,7 @@ class TestTagsE2E:
 
         async with Client(mcp) as client:
             result = await client.call_tool(
-                "search_articles", arguments={"search_params": {"tag": search_tags}}
+                "search_articles", arguments={"tags": search_tags}
             )
             response = result.data
 
