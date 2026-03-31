@@ -29,23 +29,62 @@ async def _run_sync[T](func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     return await asyncio.to_thread(func, *args, **kwargs)
 
 
+_ZOTERO_PAGE_LIMIT = 100  # Zotero API max items per request
+
+
+async def _fetch_all_paginated(
+    client: zotero.Zotero,
+    method_name: str,
+    semaphore: asyncio.Semaphore | None,
+    *args: Any,
+    **api_params: Any,
+) -> list[Any]:
+    """Fetch all items using offset-based pagination with per-page threading.
+
+    Each page is fetched in a separate thread via asyncio.to_thread(),
+    releasing the thread between pages. Uses an isolated pyzotero client
+    to avoid shared mutable state (self.links, self.url_params).
+
+    The semaphore limits concurrent HTTP requests to the Zotero API,
+    not entire pagination sequences.
+    """
+    method = getattr(client, method_name)
+    all_items: list[Any] = []
+    start = 0
+    while True:
+        page_params = {**api_params, "limit": _ZOTERO_PAGE_LIMIT, "start": start}
+        if semaphore is not None:
+            async with semaphore:
+                page = await asyncio.to_thread(method, *args, **page_params)
+        else:
+            page = await asyncio.to_thread(method, *args, **page_params)
+        all_items.extend(page)
+        if len(page) < _ZOTERO_PAGE_LIMIT:
+            break
+        start += _ZOTERO_PAGE_LIMIT
+    return all_items
+
+
 class Collection(ZoteroCollectionBase):
     """Represents a Zotero collection with async item access."""
 
     def __init__(
         self,
         client: zotero.Zotero,
+        client_factory: Callable[[], zotero.Zotero],
         data: dict[str, Any],
         semaphore: asyncio.Semaphore | None = None,
     ):
         """Initialize collection.
 
         Args:
-            client: Pyzotero client instance
+            client: Shared pyzotero client for non-paginated calls
+            client_factory: Factory to create isolated clients for paginated fetches
             data: Collection data from API
             semaphore: Optional semaphore to limit concurrent API requests
         """
         self._client = client
+        self._client_factory = client_factory
         self._semaphore = semaphore
         # Validate incoming data with Pydantic
         self._validated_data = ZoteroCollectionResponse.model_validate(data)
@@ -85,15 +124,18 @@ class Collection(ZoteroCollectionBase):
 
     async def get_items(self) -> list[ZoteroItem]:
         """Fetch all items in this collection."""
-        raw_items = await self._call(
-            lambda: self._client.everything(self._client.collection_items_top(self.key))
+        raw_items = await _fetch_all_paginated(
+            self._client_factory(), "collection_items_top", self._semaphore, self.key
         )
         return [ZoteroItem.model_validate(i) for i in raw_items]
 
     async def get_subcollections(self) -> list[ZoteroCollectionBase]:
         """Fetch subcollections of this collection."""
         subcoll_data = await self._call(self._client.collections_sub, self.key)
-        return [Collection(self._client, data, self._semaphore) for data in subcoll_data]
+        return [
+            Collection(self._client, self._client_factory, data, self._semaphore)
+            for data in subcoll_data
+        ]
 
     async def delete(self) -> None:
         """Delete this collection."""
@@ -124,6 +166,12 @@ class ZoteroClient(ZoteroClientProtocol):
             self._semaphore = asyncio.Semaphore(settings.web_zotero_max_concurrent_requests)
 
         self._cache: dict[str, Any] = {}  # Simple in-memory cache
+
+    def _make_client(self) -> zotero.Zotero:
+        """Create an isolated pyzotero client for paginated operations."""
+        if self._mode == "local":
+            return self._init_local_client()
+        return self._init_web_client()
 
     async def _call[T](self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         """Run sync function with optional semaphore rate limiting."""
@@ -177,7 +225,7 @@ class ZoteroClient(ZoteroClientProtocol):
     async def get_items(self) -> list[ZoteroItem]:
         """Fetch all top-level items in library (excludes attachments/notes)."""
         try:
-            raw_items = await self._call(lambda: self._client.everything(self._client.top()))
+            raw_items = await _fetch_all_paginated(self._make_client(), "top", self._semaphore)
             return [ZoteroItem.model_validate(i) for i in raw_items]
         except zotero_errors.UserNotAuthorisedError as e:
             raise ZoteroError(
@@ -198,10 +246,13 @@ class ZoteroClient(ZoteroClientProtocol):
     async def get_collections(self) -> list[ZoteroCollectionBase]:
         """Fetch all collections with pagination support."""
         try:
-            colls_data = await self._call(
-                lambda: self._client.everything(self._client.collections())
+            colls_data = await _fetch_all_paginated(
+                self._make_client(), "collections", self._semaphore
             )
-            return [Collection(self._client, data, self._semaphore) for data in colls_data]
+            return [
+                Collection(self._client, self._make_client, data, self._semaphore)
+                for data in colls_data
+            ]
         except zotero_errors.UserNotAuthorisedError as e:
             raise ZoteroError(
                 "Access denied when fetching collections. "
@@ -236,7 +287,7 @@ class ZoteroClient(ZoteroClientProtocol):
         if key is not None:
             try:
                 data = await self._call(self._client.collection, key)
-                return Collection(self._client, data, self._semaphore)
+                return Collection(self._client, self._make_client, data, self._semaphore)
             except zotero_errors.ResourceNotFoundError as e:
                 raise ZoteroNotFoundError("collection", key) from e
             except zotero_errors.PyZoteroError as e:
@@ -594,15 +645,11 @@ class ZoteroClient(ZoteroClientProtocol):
             ) from e
 
     async def search_items(self, search_params: ZoteroSearchParams) -> list[ZoteroItem]:
-        """Search top-level items across entire library with Zotero API parameters.
-
-        Uses pyzotero's top() method with search parameters, fetching all results
-        with automatic pagination via everything().
-        """
+        """Search top-level items across entire library with Zotero API parameters."""
         api_params = search_params.to_api_params()
         try:
-            raw_items = await self._call(
-                lambda: self._client.everything(self._client.top(**api_params))
+            raw_items = await _fetch_all_paginated(
+                self._make_client(), "top", self._semaphore, **api_params
             )
         except zotero_errors.UnsupportedParamsError as e:
             raise ZoteroError(
@@ -623,17 +670,15 @@ class ZoteroClient(ZoteroClientProtocol):
     async def search_collection_items(
         self, collection_key: str, search_params: ZoteroSearchParams
     ) -> list[ZoteroItem]:
-        """Search top-level items within a specific collection using Zotero API parameters.
-
-        Uses pyzotero's collection_items_top() with search parameters,
-        fetching all results with automatic pagination via everything().
-        """
+        """Search top-level items within a specific collection using Zotero API parameters."""
         api_params = search_params.to_api_params()
         try:
-            raw_items = await self._call(
-                lambda: self._client.everything(
-                    self._client.collection_items_top(collection_key, **api_params)
-                )
+            raw_items = await _fetch_all_paginated(
+                self._make_client(),
+                "collection_items_top",
+                self._semaphore,
+                collection_key,
+                **api_params,
             )
         except zotero_errors.ResourceNotFoundError as e:
             raise ZoteroNotFoundError("collection", collection_key) from e
@@ -691,7 +736,9 @@ class ZoteroClient(ZoteroClientProtocol):
                 ZoteroCollectionResponse.model_validate(coll) for coll in successful_colls
             ]
             return [
-                Collection(self._client, coll.model_dump(mode="json"), self._semaphore)
+                Collection(
+                    self._client, self._make_client, coll.model_dump(mode="json"), self._semaphore
+                )
                 for coll in validated_colls
             ]
         except ZoteroError:
