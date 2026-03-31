@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, model_serializer
 
 # Abstract base class for Zotero collections
 
@@ -87,6 +87,10 @@ class ZoteroCreator(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    @model_serializer(mode="wrap")
+    def _exclude_none(self, handler: Any) -> dict[str, Any]:
+        return {k: v for k, v in handler(self).items() if v is not None}
+
 
 class ZoteroItemData(BaseModel):
     """Item data fields from Zotero API (nested under 'data' key)."""
@@ -128,6 +132,10 @@ class ZoteroItemData(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    @model_serializer(mode="wrap")
+    def _exclude_none(self, handler: Any) -> dict[str, Any]:
+        return {k: v for k, v in handler(self).items() if v is not None}
+
 
 class ZoteroItem(BaseModel):
     """Complete item structure from Zotero API.
@@ -137,6 +145,10 @@ class ZoteroItem(BaseModel):
     """
 
     model_config = {"extra": "ignore"}
+
+    @model_serializer(mode="wrap")
+    def _exclude_none(self, handler: Any) -> dict[str, Any]:
+        return {k: v for k, v in handler(self).items() if v is not None}
 
     key: str
     version: int
