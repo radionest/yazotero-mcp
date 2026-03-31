@@ -141,7 +141,7 @@ class TestSearchE2E:
         """Test that search_articles responses stay under MCP 25000 token limit."""
         collection_key, _ = basic_collection_with_items
 
-        request = {"search_params": {}, "collection_key": collection_key}
+        request = {"collection_key": collection_key}
 
         async with Client(mcp) as client:
             result = await client.call_tool("search_articles", arguments=request)
@@ -239,7 +239,7 @@ class TestSearchE2E:
         test_zotero_client: ZoteroClient,
     ) -> None:
         """Test search_articles without collection_key searches entire library."""
-        request = {"search_params": {"q": "test"}}
+        request = {"query": "test"}
 
         async with Client(mcp) as client:
             result = await client.call_tool("search_articles", arguments=request)
@@ -256,7 +256,7 @@ class TestSearchE2E:
         test_zotero_client: ZoteroClient,
     ) -> None:
         """Test search_articles with item_type filter."""
-        request = {"search_params": {"item_type": "journalArticle"}}
+        request = {"item_type": "journalArticle"}
 
         async with Client(mcp) as client:
             result = await client.call_tool("search_articles", arguments=request)
@@ -272,7 +272,7 @@ class TestSearchE2E:
         test_zotero_client: ZoteroClient,
     ) -> None:
         """Test search_articles with multiple search parameters combined."""
-        request = {"search_params": {"q": "learning", "item_type": "journalArticle"}}
+        request = {"query": "learning", "item_type": "journalArticle"}
 
         async with Client(mcp) as client:
             result = await client.call_tool("search_articles", arguments=request)

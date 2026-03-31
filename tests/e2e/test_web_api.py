@@ -39,7 +39,7 @@ class TestWebApiWrite:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "search_articles",
-                arguments={"search_params": {"q": title_fragment}},
+                arguments={"query": title_fragment},
             )
             response = result.data
 
@@ -187,7 +187,7 @@ class TestWebApiWrite:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "search_articles",
-                arguments={"search_params": {"item_type": "journalArticle"}},
+                arguments={"item_type": "journalArticle"},
             )
             response = result.data
 
@@ -312,7 +312,7 @@ class TestDoiSearchAndCreate:
             async with Client(mcp) as client:
                 search_result = await client.call_tool(
                     "search_articles",
-                    arguments={"search_params": {"q": "Nanometre-scale thermometry"}},
+                    arguments={"query": "Nanometre-scale thermometry"},
                 )
                 response = search_result.data
 
