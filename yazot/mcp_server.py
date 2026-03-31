@@ -207,6 +207,8 @@ async def get_collection_items(
         if not subcollections:
             return items
 
+        await ctx.info(f"Traversing {len(subcollections)} subcollections")
+
         results = await asyncio.gather(
             *(collect_items_recursive(sub) for sub in subcollections),
             return_exceptions=True,
@@ -554,6 +556,7 @@ async def get_item_fulltext(item_key: str, ctx: Context) -> FulltextResponse:
     fulltext = await router.get_fulltext(item_key)
 
     if not fulltext:
+        await ctx.info("Indexed fulltext not available, extracting from PDF")
         fulltext = await router.get_pdf_text(item_key)
 
     if not fulltext:
@@ -654,6 +657,7 @@ async def verify_note(note_key: str, ctx: Context) -> VerificationResult:
         2. Verify the quotes: verify_note(note_key)
     """
     verifier: NoteVerifier = _deps(ctx)["verifier"]
+    await ctx.info("Verifying quotes against article fulltext")
     return await verifier.verify(note_key)
 
 
@@ -714,11 +718,16 @@ async def fetch_external_fulltext(
         raise ZoteroError("At least one of doi or title must be provided or resolvable from item")
 
     # Resolve PDF URL through cascade
+    await ctx.report_progress(progress=0, total=3)
     pdf_url, source = await resolver.resolve(effective_doi, effective_title)
 
     # Download and extract text
+    await ctx.report_progress(progress=1, total=3)
     pdf_bytes = await resolver.download(pdf_url)
+
+    await ctx.report_progress(progress=2, total=3)
     text = resolver.extract_text(pdf_bytes)
+    await ctx.report_progress(progress=3, total=3)
 
     if not text.strip():
         return ExternalFulltextResponse(
