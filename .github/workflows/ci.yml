@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --group dev
+      - run: uv run ruff check yazot/ tests/
+      - run: uv run black --check yazot/ tests/
+      - run: uv run mypy yazot/
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --group dev
+      - run: uv run pytest tests/unit/ -n auto -q
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: github.event_name == 'push' || !github.event.pull_request.head.repo.fork
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --group dev
+      - run: uv run pytest tests/e2e/ -q
+        env:
+          TEST_ZOTERO_LOCAL: "false"
+          TEST_ZOTERO_API_KEY: ${{ secrets.TEST_ZOTERO_API_KEY }}
+          TEST_ZOTERO_LIBRARY_ID: ${{ secrets.TEST_ZOTERO_LIBRARY_ID }}
+          TEST_ZOTERO_LIBRARY_TYPE: user
+          TEST_COLLECTION_KEY: ${{ secrets.TEST_COLLECTION_KEY }}
