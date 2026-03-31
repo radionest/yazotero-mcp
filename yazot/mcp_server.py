@@ -75,49 +75,9 @@ mcp: FastMCP = FastMCP(
     lifespan=app_lifespan,
     mask_error_details=True,
     instructions="""
-## Zotero MCP Endpoints
-
-### Search Operations
-- `search_articles(query, tags, collection_key, item_type)`: Search with flexible filters
-  - Returns items with abstracts/metadata
-  - Supports chunking (check `has_more`, use `get_next_chunk`)
-- `get_collection_items(collection_key, include_subcollections)`: Get items from collection
-  - Set `include_subcollections=True` for recursive retrieval
-  - Handles chunked responses
-
-### Fulltext Access
-- `get_item_fulltext(item_key)`: Get PDF text (tries indexed API, falls back to direct parsing)
-  - Returns chunked text (use `get_next_fulltext_chunk` if `has_more=True`)
-- `fetch_external_fulltext(item_key, doi, title)`: Search external sources for fulltext
-  - Cascade: Unpaywall → CORE → Libgen (if enabled)
-  - If `item_key` provided: extracts DOI/title automatically, attaches PDF to item
-  - Use when `get_item_fulltext` returns no content
-- `get_next_fulltext_chunk(chunk_id)`: Continue retrieving text chunks
-
-### Notes
-- `create_note_for_item(item_key, title, content, tags)`: Create note attached to item
-  - `content` can be string or dict (auto-formatted)
-  - Use `> quote text` (markdown blockquotes) for citations from articles
-- `get_item_notes(item_key)`: Get all notes for item
-- `verify_note(note_key)`: Verify that blockquotes in a note exist in the article fulltext
-  - Adds 'verified' tag if all quotes found, 'unverified' otherwise
-
-### Library Management
-- `add_item_by_doi(doi, collection_key, tags)`: Fetch from Crossref and create NEW item
-- `add_items_to_collection(collection_key, item_keys)`: Add existing items to a collection (no duplicates)
-- `create_collection(name, parent_collection_key)`: Create collection/subcollection
-- `remove_item(item_key, collection_key, from_library)`: Smart item removal
-  - With `collection_key`: removes from collection if in multiple, deletes from library if in only one
-  - With `from_library=True`: always deletes from library entirely
-
-### Chunking Control
-- `get_next_chunk(chunk_id)`: Get next batch of search results
-  - Always check `has_more` in responses
-  - Continue until `has_more=False`
-
-### Resources
-- `resource://collections`: List all available collections with their keys and names
-  - Use to discover collection_key values for search operations
+## Chunking
+All search and fulltext tools may return chunked responses.
+If `has_more=True`, call `get_next_chunk` (search results) or `get_next_fulltext_chunk` (text) with the provided `chunk_id`. Repeat until `has_more=False`.
 
 ## Typical Workflows
 
