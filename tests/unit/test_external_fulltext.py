@@ -255,10 +255,10 @@ class TestFetchExternalFulltextNotConfigured:
 
     @pytest.fixture(autouse=True)
     def _clear_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Ensure no external fulltext config is set."""
-        monkeypatch.delenv("UNPAYWALL_EMAIL", raising=False)
-        monkeypatch.delenv("CORE_API_KEY", raising=False)
-        monkeypatch.delenv("FULLTEXT_LIBGEN_ENABLED", raising=False)
+        """Override .env values — delenv is not enough since pydantic-settings reads .env file."""
+        monkeypatch.setenv("UNPAYWALL_EMAIL", "")
+        monkeypatch.setenv("CORE_API_KEY", "")
+        monkeypatch.setenv("FULLTEXT_LIBGEN_ENABLED", "false")
 
     @pytest.mark.asyncio
     async def test_not_configured_raises_error(self) -> None:
