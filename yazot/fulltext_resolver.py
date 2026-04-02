@@ -166,6 +166,14 @@ class FulltextResolver:
 
     async def resolve(self, doi: str | None, title: str | None) -> tuple[str, str]:
         """Find PDF URL through cascade. Returns (pdf_url, source_name)."""
+        if doi is not None:
+            doi = doi.strip() or None
+        if title is not None:
+            title = title.strip() or None
+
+        if doi is None and title is None:
+            raise FulltextNotFoundError(doi=doi, title=title)
+
         for source in self._sources:
             try:
                 if doi is not None:
@@ -178,6 +186,12 @@ class FulltextResolver:
                     return url, source.name
             except FulltextSourceError as e:
                 logger.warning("%s failed: %s", source.name, e)
+            except Exception:
+                logger.warning(
+                    "Unexpected failure from fulltext source %s",
+                    source.name,
+                    exc_info=True,
+                )
 
         raise FulltextNotFoundError(doi=doi, title=title)
 

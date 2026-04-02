@@ -45,6 +45,13 @@ def discover_sources(env: Mapping[str, str]) -> list[FulltextSource]:
             factory = ep.load()
             source = factory(env)
             if source is not None:
+                if (
+                    not isinstance(getattr(source, "name", None), str)
+                    or not isinstance(getattr(source, "description", None), str)
+                    or not callable(getattr(source, "find_pdf_url", None))
+                    or not callable(getattr(source, "aclose", None))
+                ):
+                    raise TypeError(f"Plugin {ep.name} returned an invalid fulltext source")
                 sources.append(source)
                 logger.info("Loaded fulltext source plugin: %s", source.name)
             else:

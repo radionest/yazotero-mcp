@@ -5,6 +5,7 @@ Tests the full MCP tool flow via Client(mcp), mocking external HTTP calls
 """
 
 import io
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -13,6 +14,13 @@ from fastmcp.exceptions import ToolError
 from pypdf import PdfWriter
 
 from yazot.mcp_server import mcp
+
+
+@pytest.fixture(autouse=True)
+def _disable_plugins() -> Iterator[None]:
+    """Prevent installed entry_point plugins from affecting tests."""
+    with patch("yazot.mcp_server.discover_sources", return_value=[]):
+        yield
 
 
 def _make_pdf_bytes(pages: int = 1, text: str = "Sample text") -> bytes:
@@ -266,10 +274,7 @@ class TestFetchExternalFulltextNotConfigured:
     @pytest.mark.asyncio
     async def test_not_configured_raises_error(self) -> None:
         """Tool raises ConfigurationError when no sources configured."""
-        with (
-            patch("yazot.mcp_server.discover_sources", return_value=[]),
-            pytest.raises(ToolError, match="not configured"),
-        ):
+        with pytest.raises(ToolError, match="not configured"):
             async with Client(mcp) as client:
                 await client.call_tool(
                     "fetch_external_fulltext",

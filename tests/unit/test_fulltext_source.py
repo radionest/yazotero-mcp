@@ -57,6 +57,19 @@ class TestDiscoverSources:
 
         assert sources == []
 
+    def test_skips_plugin_with_raising_factory(self) -> None:
+        def broken_factory(env: dict) -> None:  # type: ignore[type-arg]
+            raise RuntimeError("plugin factory failed")
+
+        ep = MagicMock()
+        ep.name = "broken"
+        ep.load.return_value = broken_factory
+
+        with patch("yazot.fulltext_source.importlib.metadata.entry_points", return_value=[ep]):
+            sources = discover_sources({})
+
+        assert sources == []
+
     def test_multiple_plugins(self) -> None:
         s1 = _make_source("libgen")
         s2 = _make_source("zlibrary")
