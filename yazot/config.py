@@ -24,11 +24,9 @@ class Settings(BaseSettings):
     # Only applies in web mode; local mode has no rate limits.
     web_zotero_max_concurrent_requests: int = Field(default=5, ge=1)
 
-    # External fulltext retrieval
+    # External fulltext retrieval (built-in sources)
     unpaywall_email: str | None = Field(default=None)
     core_api_key: str | None = Field(default=None)
-    fulltext_libgen_enabled: bool = Field(default=False)
-    fulltext_libgen_mirror: str = Field(default="https://libgen.is")
 
     @model_validator(mode="after")
     def validate_credentials(self) -> Self:

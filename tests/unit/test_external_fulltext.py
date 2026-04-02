@@ -1,7 +1,7 @@
 """E2E tests for fetch_external_fulltext MCP tool.
 
 Tests the full MCP tool flow via Client(mcp), mocking external HTTP calls
-(Unpaywall/CORE/Libgen) while using real MCP lifespan and TextChunker.
+(Unpaywall/CORE) while using real MCP lifespan and TextChunker.
 """
 
 import io
@@ -255,15 +255,21 @@ class TestFetchExternalFulltextNotConfigured:
 
     @pytest.fixture(autouse=True)
     def _clear_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Ensure no external fulltext config is set."""
-        monkeypatch.delenv("UNPAYWALL_EMAIL", raising=False)
-        monkeypatch.delenv("CORE_API_KEY", raising=False)
-        monkeypatch.delenv("FULLTEXT_LIBGEN_ENABLED", raising=False)
+        """Ensure no external fulltext config is set.
+
+        Must setenv to empty string (not delenv) because pydantic-settings
+        falls back to .env file values when env var is missing.
+        """
+        monkeypatch.setenv("UNPAYWALL_EMAIL", "")
+        monkeypatch.setenv("CORE_API_KEY", "")
 
     @pytest.mark.asyncio
     async def test_not_configured_raises_error(self) -> None:
         """Tool raises ConfigurationError when no sources configured."""
-        with pytest.raises(ToolError, match="not configured"):
+        with (
+            patch("yazot.mcp_server.discover_sources", return_value=[]),
+            pytest.raises(ToolError, match="not configured"),
+        ):
             async with Client(mcp) as client:
                 await client.call_tool(
                     "fetch_external_fulltext",

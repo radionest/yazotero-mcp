@@ -16,7 +16,8 @@ from .client_router import ZoteroClientRouter
 from .config import Settings
 from .crossref_client import CrossrefClient
 from .exceptions import ConfigurationError, ZoteroError, ZoteroNotFoundError
-from .fulltext_resolver import FulltextResolver
+from .fulltext_resolver import CoreClient, FulltextResolver, UnpaywallClient
+from .fulltext_source import FulltextSource, discover_sources
 from .models import (
     CollectionCreate,
     ExternalFulltextResponse,
@@ -50,7 +51,25 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     text_chunker = TextChunker(max_tokens=settings.max_chunk_size)
     note_manager = NoteManager(router)
     verifier = NoteVerifier(note_manager, router)
-    resolver = FulltextResolver(settings)
+
+    # Build fulltext sources: built-in + plugins
+    builtin_sources: list[FulltextSource] = []
+    if settings.unpaywall_email:
+        builtin_sources.append(UnpaywallClient(settings.unpaywall_email))
+    if settings.core_api_key:
+        builtin_sources.append(CoreClient(settings.core_api_key))
+    # Merge .env file values with os.environ for plugin discovery.
+    # pydantic-settings loads .env internally but doesn't export to os.environ.
+    # Keys are uppercased for consistency (pydantic-settings is case-insensitive,
+    # but plugins expect uppercase env var names by convention).
+    from dotenv import dotenv_values
+
+    plugin_env: dict[str, str] = {
+        k.upper(): v for k, v in dotenv_values(".env").items() if v is not None
+    }
+    plugin_env.update({k.upper(): v for k, v in os.environ.items()})
+    plugin_sources = discover_sources(plugin_env)
+    resolver = FulltextResolver(builtin_sources + plugin_sources)
 
     try:
         yield {
@@ -623,12 +642,10 @@ async def fetch_external_fulltext(
     title: str | None = None,
 ) -> ExternalFulltextResponse:
     """
-    Fetch full text of an article from external open-access sources.
+    Fetch full text of an article from external sources.
 
-    Searches external sources in cascade order:
-    1. Unpaywall (by DOI) - legal open-access repository
-    2. CORE (by DOI or title) - academic aggregator
-    3. Libgen (by title) - only if explicitly enabled in config
+    Searches configured sources in cascade order (built-in + plugins).
+    Use resource://fulltext-sources to see available sources.
 
     If item_key is provided, DOI/title are extracted from the Zotero item automatically,
     and the downloaded PDF is attached to the item.
@@ -638,7 +655,7 @@ async def fetch_external_fulltext(
     Args:
         item_key: Optional Zotero item key — extracts DOI/title and attaches PDF
         doi: DOI identifier (preferred for best results)
-        title: Article title (used for CORE and libgen search)
+        title: Article title
 
     Returns:
         ExternalFulltextResponse with extracted text content (potentially chunked)
@@ -655,7 +672,8 @@ async def fetch_external_fulltext(
     if not resolver.is_configured:
         raise ConfigurationError(
             "External fulltext retrieval is not configured. "
-            "Set UNPAYWALL_EMAIL and/or CORE_API_KEY in .env"
+            "Set UNPAYWALL_EMAIL and/or CORE_API_KEY in .env, "
+            "or install a fulltext source plugin."
         )
 
     # Extract DOI/title from Zotero item if item_key provided
@@ -829,6 +847,21 @@ async def list_collections(ctx: Context) -> str:
         if coll.parent_collection:
             parent_info = f", parent: {coll.parent_collection}"
         result += f"- {coll.name} (key: {coll.key}, items: {coll.num_items}{parent_info})\n"
+
+    return result
+
+
+@mcp.resource("resource://fulltext-sources")
+async def list_fulltext_sources(ctx: Context) -> str:
+    """List configured fulltext sources (built-in and plugins)."""
+    resolver: FulltextResolver = _deps(ctx)["resolver"]
+
+    if not resolver.sources:
+        return "No fulltext sources configured."
+
+    result = "Configured fulltext sources:\n\n"
+    for source in resolver.sources:
+        result += f"- {source.name}: {source.description}\n"
 
     return result
 
