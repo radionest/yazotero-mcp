@@ -100,8 +100,7 @@ Configuration via `.env` (pydantic-settings). Two modes:
 For tests: `.env.test` (auto-loaded via `conftest.py`)
 
 **Important:** pydantic-settings loads `.env` internally but does NOT export values to `os.environ`.
-Code outside Settings that needs `.env` values must use `dotenv_values()` explicitly.
-Keys in `.env` may be lowercase — normalize to uppercase when passing to external consumers.
+Tests use `load_dotenv(".env.test", override=True)` in `conftest.py` to export test config to `os.environ`.
 
 ## Conventions
 
