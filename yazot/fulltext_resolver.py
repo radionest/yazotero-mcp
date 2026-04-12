@@ -178,10 +178,9 @@ class FulltextResolver:
             try:
                 if doi is not None:
                     url = await source.find_pdf_url(doi=doi, title=title)
-                elif title is not None:
-                    url = await source.find_pdf_url(title=title)
                 else:
-                    continue
+                    # title is guaranteed non-None by the early guard above
+                    url = await source.find_pdf_url(title=title)  # type: ignore[arg-type]
                 if url:
                     return url, source.name
             except FulltextSourceError as e:
