@@ -229,6 +229,13 @@ class ChunkInfoMixin(BaseModel):
             return f"{self.current_chunk}/{self.total_chunks}"
         return None
 
+    def to_slim_dict(self) -> dict[str, Any]:
+        """Serialize excluding None values and default chunk metadata."""
+        data = self.model_dump(exclude_none=True)
+        if not data.get("has_more"):
+            data.pop("has_more", None)
+        return data
+
 
 class SearchCollectionResponse(ChunkInfoMixin):
     items: list[ZoteroItem]

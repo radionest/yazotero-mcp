@@ -199,7 +199,7 @@ async def get_collection_items(
     filtered_items = unique_items
     await ctx.debug("\n".join([str(i) for i in filtered_items]))
 
-    return chunker.build_chunked_response(filtered_items, len(filtered_items))
+    return chunker.build_chunked_response(filtered_items, len(filtered_items)).to_slim_dict()  # type: ignore[return-value]
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
@@ -234,7 +234,7 @@ async def get_next_chunk(chunk_id: str, ctx: Context) -> SearchCollectionRespons
         current_chunk=chunk_response.current_chunk,
         total_chunks=chunk_response.total_chunks,
         message=message,
-    )
+    ).to_slim_dict()  # type: ignore[return-value]
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
@@ -296,7 +296,7 @@ async def search_articles(
             if all(t in {tag.tag for tag in item.data.tags} for t in tag_filter)
         ]
 
-    return chunker.build_chunked_response(filtered_items, len(filtered_items))
+    return chunker.build_chunked_response(filtered_items, len(filtered_items)).to_slim_dict()  # type: ignore[return-value]
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
@@ -518,13 +518,13 @@ async def get_item_fulltext(item_key: str, ctx: Context) -> FulltextResponse:
             item_key=item_key,
             content="",
             error="No fulltext available for this item",
-        )
+        ).to_slim_dict()  # type: ignore[return-value]
 
     if not text_chunker.needs_chunking(fulltext):
         return FulltextResponse(
             item_key=item_key,
             content=fulltext,
-        )
+        ).to_slim_dict()  # type: ignore[return-value]
 
     chunk_data = text_chunker.chunk_text(fulltext, item_key)
 
@@ -544,7 +544,7 @@ async def get_item_fulltext(item_key: str, ctx: Context) -> FulltextResponse:
         current_chunk=chunk_data.current_chunk,
         total_chunks=chunk_data.total_chunks,
         message=message,
-    )
+    ).to_slim_dict()  # type: ignore[return-value]
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
@@ -585,7 +585,7 @@ async def get_next_fulltext_chunk(chunk_id: str, ctx: Context) -> FulltextRespon
         current_chunk=chunk_data.current_chunk,
         total_chunks=chunk_data.total_chunks,
         message=message,
-    )
+    ).to_slim_dict()  # type: ignore[return-value]
 
 
 @mcp.tool(annotations=ToolAnnotations(idempotentHint=True))
@@ -689,7 +689,7 @@ async def fetch_external_fulltext(
             content="",
             source=source,
             error="PDF downloaded but no text could be extracted",
-        )
+        ).to_slim_dict()  # type: ignore[return-value]
 
     # Attach PDF to Zotero item if item_key provided
     pdf_attached = False
@@ -704,7 +704,7 @@ async def fetch_external_fulltext(
             content=text,
             source=source,
             pdf_attached=pdf_attached,
-        )
+        ).to_slim_dict()  # type: ignore[return-value]
 
     chunk_data = text_chunker.chunk_text(text, chunk_key)
     message = None
@@ -725,7 +725,7 @@ async def fetch_external_fulltext(
         current_chunk=chunk_data.current_chunk,
         total_chunks=chunk_data.total_chunks,
         message=message,
-    )
+    ).to_slim_dict()  # type: ignore[return-value]
 
 
 async def _attach_pdf_to_item(ctx: Context, item_key: str, pdf_bytes: bytes) -> bool:
