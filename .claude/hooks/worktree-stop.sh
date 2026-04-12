@@ -9,6 +9,16 @@ if echo "$INPUT" | grep -qE '"stop_hook_active"\s*:\s*true'; then
   exit 0
 fi
 
+# Debounce: не блокируем повторно в течение 120 секунд
+DEBOUNCE_FILE="/tmp/claude-worktree-stop-${PPID}"
+if [ -f "$DEBOUNCE_FILE" ]; then
+  LAST=$(cat "$DEBOUNCE_FILE" 2>/dev/null || echo 0)
+  NOW=$(date +%s)
+  if [ $((NOW - LAST)) -lt 120 ]; then
+    exit 0
+  fi
+fi
+
 # Проверяем, что мы в git-репозитории
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
@@ -25,6 +35,9 @@ HAS_CHANGES=$(git status --porcelain 2>/dev/null | head -1)
 DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 AHEAD=$(git rev-list "$DEFAULT_BRANCH"..HEAD --count 2>/dev/null || echo "0")
+
+# Записываем время debounce
+date +%s > "$DEBOUNCE_FILE"
 
 # Блокируем stop — stderr покажется Claude
 cat >&2 <<EOF
