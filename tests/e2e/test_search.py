@@ -5,8 +5,10 @@ import json
 import pytest
 from fastmcp import Client
 
+from tests.e2e.conftest import parse_tool_result
 from yazot.chunker import ResponseChunker
 from yazot.mcp_server import mcp
+from yazot.models import SearchCollectionResponse
 from yazot.zotero_client import ZoteroClient
 
 
@@ -26,7 +28,7 @@ class TestSearchE2E:
 
         async with Client(mcp) as client:
             result = await client.call_tool("get_collection_items", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Verify response structure
         assert response.count == expected_count
@@ -53,7 +55,7 @@ class TestSearchE2E:
                 "get_collection_items",
                 arguments={"collection_key": collection_key},
             )
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Check that fulltext field is populated (might be None)
         for item in response.items:
@@ -75,7 +77,7 @@ class TestSearchE2E:
                 "get_collection_items",
                 arguments={"collection_key": collection_key},
             )
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Chunking should be triggered with small chunk size
         if response.has_more:
@@ -101,7 +103,7 @@ class TestSearchE2E:
 
         async with Client(mcp) as client:
             result = await client.call_tool("get_collection_items", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Estimate tokens for complete response
         chunker = ResponseChunker(max_tokens=18000)
@@ -145,7 +147,7 @@ class TestSearchE2E:
 
         async with Client(mcp) as client:
             result = await client.call_tool("search_articles", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Estimate tokens for complete response
         chunker = ResponseChunker(max_tokens=18000)
@@ -183,7 +185,7 @@ class TestSearchE2E:
             result = await client.call_tool(
                 "get_collection_items", arguments={"collection_key": collection_key}
             )
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
             # Check first chunk
             response_json = json.dumps(
@@ -207,7 +209,7 @@ class TestSearchE2E:
             while response.has_more:
                 chunk_id = response.chunk_id
                 result = await client.call_tool("get_next_chunk", arguments={"chunk_id": chunk_id})
-                response = result.data
+                response = parse_tool_result(result, SearchCollectionResponse)
 
                 # Check each chunk
                 response_json = json.dumps(
@@ -243,7 +245,7 @@ class TestSearchE2E:
 
         async with Client(mcp) as client:
             result = await client.call_tool("search_articles", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Should return results or empty list, not raise NotImplementedError
         assert isinstance(response.items, list)
@@ -260,11 +262,11 @@ class TestSearchE2E:
 
         async with Client(mcp) as client:
             result = await client.call_tool("search_articles", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # All returned items should be journal articles
         for item in response.items:
-            assert item.data.itemType == "journalArticle"
+            assert item.data.item_type == "journalArticle"
 
     @pytest.mark.asyncio
     async def test_search_articles_combined_filters(
@@ -276,9 +278,9 @@ class TestSearchE2E:
 
         async with Client(mcp) as client:
             result = await client.call_tool("search_articles", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Should apply all filters
         for item in response.items:
-            assert item.data.itemType == "journalArticle"
+            assert item.data.item_type == "journalArticle"
             # Query is applied server-side, so we just verify type here

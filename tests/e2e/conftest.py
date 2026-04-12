@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -6,11 +7,34 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from fastmcp import Client
+from pydantic import BaseModel
 
 from yazot.config import Settings
 from yazot.mcp_server import mcp
 from yazot.models import ZoteroItem
 from yazot.zotero_client import ZoteroClient
+
+
+def parse_tool_result[T: BaseModel](result: Any, model: type[T]) -> T:
+    """Parse FastMCP call_tool result into a Pydantic model.
+
+    FastMCP's Root objects lose nested model structure, so we re-parse
+    from raw JSON text using model_validate with alias support.
+    """
+    raw = json.loads(result.content[0].text)
+    return model.model_validate(raw)
+
+
+def parse_tool_result_list[T: BaseModel](result: Any, model: type[T]) -> list[T]:
+    """Parse FastMCP call_tool result into a list of Pydantic models."""
+    raw = json.loads(result.content[0].text)
+    return [model.model_validate(item) for item in raw]
+
+
+def parse_tool_result_dict(result: Any) -> dict[str, Any]:
+    """Parse FastMCP call_tool result into a plain dict."""
+    return json.loads(result.content[0].text)
+
 
 if TYPE_CHECKING:
     from tests.e2e.test_helpers import ZoteroTestDataManager

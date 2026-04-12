@@ -3,8 +3,9 @@
 import pytest
 from fastmcp import Client
 
+from tests.e2e.conftest import parse_tool_result
 from yazot.mcp_server import mcp
-from yazot.models import ZoteroItem
+from yazot.models import Note, SearchCollectionResponse, ZoteroItem
 from yazot.zotero_client import ZoteroClient
 
 
@@ -24,7 +25,7 @@ class TestTagsE2E:
             result = await client.call_tool(
                 "get_collection_items", arguments={"collection_key": collection_key_items_with_tags}
             )
-            test_items = result.data.items
+            test_items = parse_tool_result(result, SearchCollectionResponse).items
 
         # Find our test items in the response
         test_item_keys = {item.key for item in test_items}
@@ -59,10 +60,8 @@ class TestTagsE2E:
         search_tag = "manual-tag-1"
 
         async with Client(mcp) as client:
-            result = await client.call_tool(
-                "search_articles", arguments={"tags": [search_tag]}
-            )
-            response = result.data
+            result = await client.call_tool("search_articles", arguments={"tags": [search_tag]})
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Should find at least the item with this tag
         assert response.count > 0
@@ -84,10 +83,8 @@ class TestTagsE2E:
         search_tags = ["manual-mixed", "auto-mixed"]
 
         async with Client(mcp) as client:
-            result = await client.call_tool(
-                "search_articles", arguments={"tags": search_tags}
-            )
-            response = result.data
+            result = await client.call_tool("search_articles", arguments={"tags": search_tags})
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Should find at least one item with both tags
         assert response.count > 0
@@ -113,7 +110,7 @@ class TestTagsE2E:
                 "get_collection_items",
                 arguments={"collection_key": collection_key_items_with_tags},
             )
-            item_key = items_result.data.items[0].key
+            item_key = parse_tool_result(items_result, SearchCollectionResponse).items[0].key
 
             result = await client.call_tool(
                 "create_note_for_item",
@@ -124,7 +121,7 @@ class TestTagsE2E:
                     "tags": note_tags,
                 },
             )
-            note = result.data
+            note = parse_tool_result(result, Note)
 
         # Verify note was created with tags
         assert note is not None
@@ -143,7 +140,7 @@ class TestTagsE2E:
             result = await client.call_tool(
                 "get_collection_items", arguments={"collection_key": collection_key_items_with_tags}
             )
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         for item in response.items:
             # Verify tags property returns strings

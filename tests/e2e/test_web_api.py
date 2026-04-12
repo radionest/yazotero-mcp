@@ -8,7 +8,9 @@ import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
+from tests.e2e.conftest import parse_tool_result, parse_tool_result_dict, parse_tool_result_list
 from yazot.mcp_server import mcp
+from yazot.models import Note, SearchCollectionResponse, ZoteroItem
 from yazot.zotero_client import ZoteroClient
 
 if TYPE_CHECKING:
@@ -41,7 +43,7 @@ class TestWebApiWrite:
                 "search_articles",
                 arguments={"query": title_fragment},
             )
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         assert isinstance(response.items, list)
         assert response.count >= 0
@@ -69,7 +71,7 @@ class TestWebApiWrite:
                 "get_collection_items",
                 arguments={"collection_key": collection_key},
             )
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         assert response.count == 5
         assert isinstance(response.items, list)
@@ -98,7 +100,7 @@ class TestWebApiWrite:
                     "content": "Content for live integration test.",
                 },
             )
-            note = note_result.data
+            note = parse_tool_result(note_result, Note)
 
         assert note.key
         assert note.parent_key == item_key
@@ -108,7 +110,7 @@ class TestWebApiWrite:
                 "get_item_notes",
                 arguments={"item_key": item_key},
             )
-            notes = notes_result.data
+            notes = parse_tool_result_list(notes_result, Note)
 
         note_keys = [n.key for n in notes]
         assert note.key in note_keys
@@ -132,7 +134,7 @@ class TestWebApiWrite:
                     "create_collection",
                     arguments={"name": "Live Hierarchy Parent"},
                 )
-                parent_data = parent_result.data
+                parent_data = parse_tool_result_dict(parent_result)
                 assert parent_data["key"]
                 parent_key = parent_data["key"]
 
@@ -144,7 +146,7 @@ class TestWebApiWrite:
                         "parent_collection_key": parent_key,
                     },
                 )
-                sub_data = sub_result.data
+                sub_data = parse_tool_result_dict(sub_result)
                 assert sub_data["key"]
                 sub_key = sub_data["key"]
 
@@ -159,7 +161,7 @@ class TestWebApiWrite:
                         "include_subcollections": True,
                     },
                 )
-                response = result.data
+                response = parse_tool_result(result, SearchCollectionResponse)
 
             assert isinstance(response.items, list)
             returned_keys = {item.key for item in response.items}
@@ -189,11 +191,11 @@ class TestWebApiWrite:
                 "search_articles",
                 arguments={"item_type": "journalArticle"},
             )
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         assert isinstance(response.items, list)
         for item in response.items:
-            assert item.data.itemType == "journalArticle"
+            assert item.data.item_type == "journalArticle"
 
 
 _DOI = "10.1038/nature12373"
@@ -216,11 +218,11 @@ class TestDoiSearchAndCreate:
                     "add_item_by_doi",
                     arguments={"doi": _DOI},
                 )
-                item = result.data
+                item = parse_tool_result(result, ZoteroItem)
 
             assert item.key
             assert item.data.title
-            assert item.data.DOI == _DOI
+            assert item.data.doi == _DOI
             assert len(item.data.creators) > 0
 
         finally:
@@ -244,7 +246,7 @@ class TestDoiSearchAndCreate:
                     "create_collection",
                     arguments={"name": "DOI Test Collection"},
                 )
-                collection_data = coll_result.data
+                collection_data = parse_tool_result_dict(coll_result)
                 assert collection_data["key"]
                 collection_key = collection_data["key"]
 
@@ -252,7 +254,7 @@ class TestDoiSearchAndCreate:
                     "add_item_by_doi",
                     arguments={"doi": _DOI, "collection_key": collection_key},
                 )
-                item = item_result.data
+                item = parse_tool_result(item_result, ZoteroItem)
                 item_key = item.key
 
             assert collection_key in item.data.collections
@@ -281,7 +283,7 @@ class TestDoiSearchAndCreate:
                     "add_item_by_doi",
                     arguments={"doi": _DOI, "tags": tags},
                 )
-                item = result.data
+                item = parse_tool_result(result, ZoteroItem)
 
             item_tag_names = [t.tag for t in item.data.tags]
             for tag in tags:
@@ -307,14 +309,14 @@ class TestDoiSearchAndCreate:
                     "add_item_by_doi",
                     arguments={"doi": _DOI},
                 )
-                item = result.data
+                item = parse_tool_result(result, ZoteroItem)
 
             async with Client(mcp) as client:
                 search_result = await client.call_tool(
                     "search_articles",
                     arguments={"query": "Nanometre-scale thermometry"},
                 )
-                response = search_result.data
+                response = parse_tool_result(search_result, SearchCollectionResponse)
 
             assert isinstance(response.items, list)
             found_keys = {i.key for i in response.items}
