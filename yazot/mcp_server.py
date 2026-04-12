@@ -869,15 +869,21 @@ async def update_item_tags(
     if mode == "replace":
         new_tags = [ZoteroTag(tag=t, type=1) for t in tags]
     elif mode == "add":
-        existing_names = {t.tag for t in existing_tags}
-        new_tags = list(existing_tags)
+        existing_names: set[str] = set()
+        new_tags = []
+        for existing in existing_tags:
+            if existing.tag not in existing_names:
+                existing_names.add(existing.tag)
+                new_tags.append(existing)
         for tag_name in tags:
             if tag_name not in existing_names:
                 new_tags.append(ZoteroTag(tag=tag_name, type=1))
                 existing_names.add(tag_name)
-    else:  # mode == "remove"
+    elif mode == "remove":
         remove_set = set(tags)
         new_tags = [t for t in existing_tags if t.tag not in remove_set]
+    else:
+        raise ZoteroError(f"Invalid mode: {mode!r}. Use 'add', 'remove', or 'replace'.")
 
     tags_after = [t.tag for t in new_tags]
 

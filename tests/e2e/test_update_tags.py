@@ -75,7 +75,7 @@ class TestUpdateItemTagsAdd:
         collection_key_items_with_tags: str,
         test_zotero_client: ZoteroClient,
     ) -> None:
-        """Adding new tags preserves type of existing auto-tags (type=0)."""
+        """Adding new tags preserves type of existing auto-tags (type=0) and creates new with type=1."""
         # Get an item with auto tags (type=0)
         async with Client(mcp) as client:
             from tests.e2e.conftest import parse_tool_result
@@ -107,6 +107,11 @@ class TestUpdateItemTagsAdd:
         raw_tags = raw["data"]["tags"]
         auto_tags = [t for t in raw_tags if t["type"] == 0]
         assert len(auto_tags) > 0, "Auto-tags should be preserved with type=0"
+
+        # Verify newly added tag has type=1
+        extra = next((t for t in raw_tags if t["tag"] == "extra-tag"), None)
+        assert extra is not None, "Newly added tag should exist"
+        assert extra["type"] == 1, "Newly added tag should have type=1"
 
     @pytest.mark.asyncio
     async def test_add_empty_list_is_noop(
