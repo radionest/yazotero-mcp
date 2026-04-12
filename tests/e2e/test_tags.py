@@ -59,9 +59,7 @@ class TestTagsE2E:
         search_tag = "manual-tag-1"
 
         async with Client(mcp) as client:
-            result = await client.call_tool(
-                "search_articles", arguments={"tags": [search_tag]}
-            )
+            result = await client.call_tool("search_articles", arguments={"tags": [search_tag]})
             response = result.data
 
         # Should find at least the item with this tag
@@ -84,9 +82,7 @@ class TestTagsE2E:
         search_tags = ["manual-mixed", "auto-mixed"]
 
         async with Client(mcp) as client:
-            result = await client.call_tool(
-                "search_articles", arguments={"tags": search_tags}
-            )
+            result = await client.call_tool("search_articles", arguments={"tags": search_tags})
             response = result.data
 
         # Should find at least one item with both tags

@@ -31,7 +31,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "RUF"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "F841"]
+"tests/*" = ["S101", "F841", "RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -70,10 +70,6 @@ markers = [
     "live: requires running local Zotero instance",
 ]
 
-[tool.black]
-line-length = 100
-target-version = ['py312']
-
 [dependency-groups]
 dev = [
     "pytest>=7.0.0",
@@ -81,7 +77,6 @@ dev = [
     "pytest-cov>=4.0.0",
     "ruff>=0.6.0",
     "mypy>=1.18.2",
-    "black>=24.8.0",
     "pre-commit>=3.8.0",
     "ipython>=8.0.0",
     "pytest-timeout>=2.4.0",

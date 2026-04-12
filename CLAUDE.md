@@ -68,16 +68,16 @@ uv run pytest tests/unit/test_formatters.py -v # specific file
 uv run pytest -k "test_search" -v              # by name
 uv run pytest -m unit -q                       # by marker
 
-# Linters (pre-commit: black, ruff, mypy) — run sequentially, not in parallel
+# Linters (pre-commit: ruff, mypy) — run sequentially, not in parallel
 uv run ruff check yazot/ tests/
-uv run black --check yazot/ tests/
+uv run ruff format --check yazot/ tests/
 uv run mypy yazot/
 
 # All pre-commit hooks
 pre-commit run --all-files
 ```
 
-**Claude Code hooks**: PostToolUse on Edit/Write auto-runs ruff --fix + black on .py files.
+**Claude Code hooks**: PostToolUse on Edit/Write auto-runs ruff --fix + ruff format on .py files.
 
 ## Worktree Workflow
 
