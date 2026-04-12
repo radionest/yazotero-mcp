@@ -5,7 +5,7 @@ import os
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastmcp import Context, FastMCP
@@ -21,6 +21,7 @@ from .models import (
     CollectionCreate,
     ExternalFulltextResponse,
     FulltextResponse,
+    ItemUpdate,
     Note,
     SearchCollectionResponse,
     VerificationResult,
@@ -112,6 +113,12 @@ If `has_more=True`, call `get_next_chunk` (search results) or `get_next_fulltext
 1. Find item using search or get_collection_items
 2. `remove_item(item_key="ABC123", collection_key="COL456")` — smart removal
 3. Or `remove_item(item_key="ABC123", from_library=True)` — force delete from library
+
+**Manage item tags:**
+1. Find item using search or get_collection_items
+2. `update_item_tags(item_key="ABC123", tags=["important", "to-read"])` — add tags (default)
+3. `update_item_tags(item_key="ABC123", tags=["to-read"], mode="remove")` — remove specific tags
+4. `update_item_tags(item_key="ABC123", tags=["reviewed"], mode="replace")` — replace all tags
 
 **Create and verify notes:**
 1. Find item using search or get_collection_items tool
@@ -811,6 +818,88 @@ async def remove_item(
         "action": "removed_from_collection",
         "item_key": item_key,
         "collection_key": collection_key_str,
+    }
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
+async def update_item_tags(
+    item_key: str,
+    tags: list[str],
+    ctx: Context,
+    mode: Literal["add", "remove", "replace"] = "add",
+) -> dict[str, Any]:
+    """
+    Add, remove, or replace tags on a Zotero item.
+
+    Manages tags on an existing item with three modes:
+    - 'add' (default): append tags to existing ones, duplicates are ignored
+    - 'remove': remove specified tags, missing tags are silently ignored
+    - 'replace': replace all tags with the provided list, empty list clears all tags
+
+    New tags are created with type=1 (manual/user-created).
+    Existing tags preserve their original type.
+
+    Args:
+        item_key: The Zotero item key to update tags on
+        tags: List of tag names to add, remove, or set
+        mode: Operation mode — 'add', 'remove', or 'replace' (default: 'add')
+
+    Returns:
+        Dictionary with item_key, mode, tags_before, tags_after, and changed flag
+
+    Examples:
+        # Add tags to an item
+        update_item_tags(item_key="ABC123", tags=["important", "to-read"])
+
+        # Remove specific tags
+        update_item_tags(item_key="ABC123", tags=["to-read"], mode="remove")
+
+        # Replace all tags
+        update_item_tags(item_key="ABC123", tags=["reviewed"], mode="replace")
+
+        # Clear all tags
+        update_item_tags(item_key="ABC123", tags=[], mode="replace")
+    """
+    router: ZoteroClientRouter = _deps(ctx)["router"]
+
+    if mode == "replace":
+        new_tags = [ZoteroTag(tag=t, type=1) for t in tags]
+        tags_before: list[str] = []
+    else:
+        item = await router.get_item(item_key)
+        existing_tags = item.data.tags
+        tags_before = [t.tag for t in existing_tags]
+
+        if mode == "add":
+            existing_names = {t.tag for t in existing_tags}
+            new_tags = list(existing_tags)
+            for tag_name in tags:
+                if tag_name not in existing_names:
+                    new_tags.append(ZoteroTag(tag=tag_name, type=1))
+                    existing_names.add(tag_name)
+        else:  # mode == "remove"
+            remove_set = set(tags)
+            new_tags = [t for t in existing_tags if t.tag not in remove_set]
+
+    tags_after = [t.tag for t in new_tags]
+
+    if mode != "replace" and tags_before == tags_after:
+        return {
+            "item_key": item_key,
+            "mode": mode,
+            "tags_before": tags_before,
+            "tags_after": tags_after,
+            "changed": False,
+        }
+
+    await router.update_item(item_key, ItemUpdate(tags=new_tags))
+
+    return {
+        "item_key": item_key,
+        "mode": mode,
+        "tags_before": tags_before,
+        "tags_after": tags_after,
+        "changed": True,
     }
 
 
