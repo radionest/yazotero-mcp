@@ -821,7 +821,7 @@ async def remove_item(
     }
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=True))
 async def update_item_tags(
     item_key: str,
     tags: list[str],
