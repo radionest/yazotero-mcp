@@ -284,7 +284,7 @@ class CrossrefClient:
             "book": "book",
             "proceedings-article": "conferencePaper",
             "report": "report",
-            "dataset": "document",
+            "dataset": "dataset",
             "posted-content": "preprint",
         }
         return type_mapping.get(crossref_type, "journalArticle")

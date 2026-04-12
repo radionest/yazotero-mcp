@@ -109,6 +109,9 @@ class ZoteroItemData(BaseModel):
     url: str | None = None
     isbn: str | None = Field(None, alias="ISBN")
     issn: str | None = Field(None, alias="ISSN")
+    pmid: str | None = Field(None, alias="PMID")
+    pmcid: str | None = Field(None, alias="PMCID")
+    citation_key: str | None = Field(None, alias="citationKey")
 
     # Publication fields (journalArticle, conferencePaper)
     publication_title: str | None = Field(None, alias="publicationTitle")
@@ -121,6 +124,10 @@ class ZoteroItemData(BaseModel):
 
     # Book fields
     publisher: str | None = None
+    place: str | None = None
+    original_date: str | None = Field(None, alias="originalDate")
+    original_publisher: str | None = Field(None, alias="originalPublisher")
+    original_place: str | None = Field(None, alias="originalPlace")
 
     # Note fields
     note: str | None = None
@@ -292,6 +299,9 @@ class ItemCreate(BaseModel):
     url: str | None = None
     isbn: str | None = Field(None, alias="ISBN")
     issn: str | None = Field(None, alias="ISSN")
+    pmid: str | None = Field(None, alias="PMID")
+    pmcid: str | None = Field(None, alias="PMCID")
+    citation_key: str | None = Field(None, alias="citationKey")
 
     # Publication fields (journalArticle, conferencePaper)
     publication_title: str | None = Field(None, alias="publicationTitle")
@@ -304,6 +314,10 @@ class ItemCreate(BaseModel):
 
     # Book fields
     publisher: str | None = None
+    place: str | None = None
+    original_date: str | None = Field(None, alias="originalDate")
+    original_publisher: str | None = Field(None, alias="originalPublisher")
+    original_place: str | None = Field(None, alias="originalPlace")
 
     # Note fields
     note: str | None = None
@@ -333,6 +347,9 @@ class ItemUpdate(BaseModel):
     url: str | None = None
     isbn: str | None = Field(None, alias="ISBN")
     issn: str | None = Field(None, alias="ISSN")
+    pmid: str | None = Field(None, alias="PMID")
+    pmcid: str | None = Field(None, alias="PMCID")
+    citation_key: str | None = Field(None, alias="citationKey")
 
     # Publication fields
     publication_title: str | None = Field(None, alias="publicationTitle")
@@ -345,6 +362,10 @@ class ItemUpdate(BaseModel):
 
     # Book fields
     publisher: str | None = None
+    place: str | None = None
+    original_date: str | None = Field(None, alias="originalDate")
+    original_publisher: str | None = Field(None, alias="originalPublisher")
+    original_place: str | None = Field(None, alias="originalPlace")
 
     # Note fields
     note: str | None = None
