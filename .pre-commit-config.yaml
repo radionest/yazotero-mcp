@@ -23,6 +23,6 @@ repos:
         name: mypy
         entry: uv run mypy
         language: system
-        types: [python]
+        files: ^yazot/
         pass_filenames: false
         args: [yazot/]
