@@ -1,4 +1,4 @@
-"""Tests for external fulltext resolver — Unpaywall, CORE, Libgen clients + cascade."""
+"""Tests for external fulltext resolver — Unpaywall, CORE clients + cascade."""
 
 import io
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -7,7 +7,6 @@ import pytest
 from pypdf import PdfWriter
 
 from tests.conftest import make_httpx_response
-from yazot.config import Settings
 from yazot.exceptions import (
     FulltextDownloadError,
     FulltextNotFoundError,
@@ -16,9 +15,9 @@ from yazot.exceptions import (
 from yazot.fulltext_resolver import (
     CoreClient,
     FulltextResolver,
-    LibgenClient,
     UnpaywallClient,
 )
+from yazot.fulltext_source import FulltextSource
 
 # --- Helpers ---
 
@@ -32,6 +31,18 @@ def make_pdf_bytes() -> bytes:
     return buf.getvalue()
 
 
+def make_mock_source(
+    name: str = "mock", description: str = "Mock source", return_url: str | None = None
+) -> FulltextSource:
+    """Create a mock FulltextSource."""
+    source = MagicMock(spec=FulltextSource)
+    source.name = name
+    source.description = description
+    source.find_pdf_url = AsyncMock(return_value=return_url)
+    source.aclose = AsyncMock()
+    return source
+
+
 # --- UnpaywallClient tests ---
 
 
@@ -39,6 +50,10 @@ class TestUnpaywallClient:
     @pytest.fixture
     def client(self) -> UnpaywallClient:
         return UnpaywallClient(email="test@example.com")
+
+    def test_name_and_description(self, client: UnpaywallClient) -> None:
+        assert client.name == "unpaywall"
+        assert "Unpaywall" in client.description
 
     async def test_find_pdf_url_success(self, client: UnpaywallClient) -> None:
         response_data = {
@@ -54,7 +69,7 @@ class TestUnpaywallClient:
         mock_response = make_httpx_response(json_data=response_data)
 
         with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
-            url = await client.find_pdf_url("10.1234/test")
+            url = await client.find_pdf_url(doi="10.1234/test")
 
         assert url == "https://example.com/paper.pdf"
 
@@ -71,7 +86,7 @@ class TestUnpaywallClient:
         mock_response = make_httpx_response(json_data=response_data)
 
         with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
-            url = await client.find_pdf_url("10.1234/test")
+            url = await client.find_pdf_url(doi="10.1234/test")
 
         assert url == "https://archive.org/paper.pdf"
 
@@ -79,7 +94,7 @@ class TestUnpaywallClient:
         mock_response = make_httpx_response(status_code=404)
 
         with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
-            url = await client.find_pdf_url("10.1234/nonexistent")
+            url = await client.find_pdf_url(doi="10.1234/nonexistent")
 
         assert url is None
 
@@ -93,8 +108,12 @@ class TestUnpaywallClient:
         mock_response = make_httpx_response(json_data=response_data)
 
         with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
-            url = await client.find_pdf_url("10.1234/closed")
+            url = await client.find_pdf_url(doi="10.1234/closed")
 
+        assert url is None
+
+    async def test_find_pdf_url_no_doi_returns_none(self, client: UnpaywallClient) -> None:
+        url = await client.find_pdf_url(title="Some Title")
         assert url is None
 
     async def test_find_pdf_url_server_error(self, client: UnpaywallClient) -> None:
@@ -104,7 +123,7 @@ class TestUnpaywallClient:
             patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response),
             pytest.raises(FulltextSourceError, match="Unpaywall"),
         ):
-            await client.find_pdf_url("10.1234/test")
+            await client.find_pdf_url(doi="10.1234/test")
 
 
 # --- CoreClient tests ---
@@ -114,6 +133,10 @@ class TestCoreClient:
     @pytest.fixture
     def client(self) -> CoreClient:
         return CoreClient(api_key="test-key")
+
+    def test_name_and_description(self, client: CoreClient) -> None:
+        assert client.name == "core"
+        assert "CORE" in client.description
 
     async def test_find_pdf_url_by_doi(self, client: CoreClient) -> None:
         response_data = {
@@ -130,7 +153,7 @@ class TestCoreClient:
         mock_response = make_httpx_response(json_data=response_data)
 
         with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
-            url = await client.find_pdf_url("10.1234/test", None)
+            url = await client.find_pdf_url(doi="10.1234/test")
 
         assert url == "https://core.ac.uk/download/pdf/12345.pdf"
 
@@ -148,7 +171,7 @@ class TestCoreClient:
         mock_response = make_httpx_response(json_data=response_data)
 
         with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
-            url = await client.find_pdf_url(None, "Machine Learning Paper")
+            url = await client.find_pdf_url(title="Machine Learning Paper")
 
         assert url == "https://core.ac.uk/download/pdf/67890.pdf"
 
@@ -157,12 +180,12 @@ class TestCoreClient:
         mock_response = make_httpx_response(json_data=response_data)
 
         with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
-            url = await client.find_pdf_url("10.1234/nothing", None)
+            url = await client.find_pdf_url(doi="10.1234/nothing")
 
         assert url is None
 
     async def test_find_pdf_url_no_query(self, client: CoreClient) -> None:
-        url = await client.find_pdf_url(None, None)
+        url = await client.find_pdf_url()
         assert url is None
 
     async def test_find_pdf_url_server_error(self, client: CoreClient) -> None:
@@ -172,207 +195,88 @@ class TestCoreClient:
             patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response),
             pytest.raises(FulltextSourceError, match="CORE"),
         ):
-            await client.find_pdf_url("10.1234/test", None)
-
-
-# --- LibgenClient tests ---
-
-
-class TestLibgenClient:
-    @pytest.fixture
-    def client(self) -> LibgenClient:
-        return LibgenClient(mirror="https://libgen.is")
-
-    async def test_find_pdf_url_success(self, client: LibgenClient) -> None:
-        html = """
-        <html><body>
-        <table class="c">
-            <tr><td><a href="/book/index.php?md5=d41d8cd98f00b204e9800998ecf8427e">Title</a></td></tr>
-        </table>
-        </body></html>
-        """
-        mock_response = make_httpx_response(
-            content=html.encode(),
-            headers={"content-type": "text/html"},
-        )
-        # Override json to return text
-        mock_response._content = html.encode()
-
-        with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
-            url = await client.find_pdf_url("Test Article Title")
-
-        assert url == "https://libgen.is/get.php?md5=d41d8cd98f00b204e9800998ecf8427e"
-
-    async def test_find_pdf_url_no_results(self, client: LibgenClient) -> None:
-        html = "<html><body><table class='c'></table></body></html>"
-        mock_response = make_httpx_response(content=html.encode())
-
-        with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
-            url = await client.find_pdf_url("Nonexistent Article")
-
-        assert url is None
-
-    async def test_find_pdf_url_server_error(self, client: LibgenClient) -> None:
-        mock_response = make_httpx_response(status_code=503)
-
-        with (
-            patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response),
-            pytest.raises(FulltextSourceError, match="Libgen"),
-        ):
-            await client.find_pdf_url("Test")
+            await client.find_pdf_url(doi="10.1234/test")
 
 
 # --- FulltextResolver tests ---
 
 
 class TestFulltextResolver:
-    @pytest.fixture
-    def settings_all(self) -> Settings:
-        return Settings(
-            zotero_local=True,
-            unpaywall_email="test@example.com",
-            core_api_key="test-core-key",
-            fulltext_libgen_enabled=True,
-            fulltext_libgen_mirror="https://libgen.is",
-        )
-
-    @pytest.fixture
-    def settings_unpaywall_only(self) -> Settings:
-        return Settings(
-            zotero_local=True,
-            unpaywall_email="test@example.com",
-        )
-
-    @pytest.fixture
-    def settings_none(self) -> Settings:
-        return Settings(zotero_local=True)
-
-    def test_is_configured_all(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
+    def test_is_configured_with_sources(self) -> None:
+        source = make_mock_source()
+        resolver = FulltextResolver([source])
         assert resolver.is_configured is True
 
-    def test_is_configured_none(self, settings_none: Settings) -> None:
-        resolver = FulltextResolver(settings_none)
+    def test_is_configured_empty(self) -> None:
+        resolver = FulltextResolver([])
         assert resolver.is_configured is False
 
-    def test_libgen_not_created_when_disabled(self, settings_unpaywall_only: Settings) -> None:
-        resolver = FulltextResolver(settings_unpaywall_only)
-        assert resolver._libgen is None
-        assert resolver._unpaywall is not None
-        assert resolver._core is None
+    def test_sources_property(self) -> None:
+        s1 = make_mock_source("a")
+        s2 = make_mock_source("b")
+        resolver = FulltextResolver([s1, s2])
+        assert len(resolver.sources) == 2
+        assert resolver.sources[0].name == "a"
 
-    async def test_cascade_unpaywall_succeeds(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
-        assert resolver._unpaywall is not None
-        with patch.object(
-            resolver._unpaywall,
-            "find_pdf_url",
-            new_callable=AsyncMock,
-            return_value="https://pdf.com/a.pdf",
-        ):
-            url, source = await resolver.resolve("10.1234/test", "Test Title")
+    async def test_cascade_first_source_succeeds(self) -> None:
+        s1 = make_mock_source("first", return_url="https://pdf.com/a.pdf")
+        s2 = make_mock_source("second")
+        resolver = FulltextResolver([s1, s2])
+
+        url, source = await resolver.resolve("10.1234/test", "Test Title")
 
         assert url == "https://pdf.com/a.pdf"
-        assert source == "unpaywall"
+        assert source == "first"
+        s2.find_pdf_url.assert_not_called()
 
-    async def test_cascade_fallback_to_core(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
-        assert resolver._unpaywall is not None
-        assert resolver._core is not None
-        with (
-            patch.object(
-                resolver._unpaywall, "find_pdf_url", new_callable=AsyncMock, return_value=None
-            ),
-            patch.object(
-                resolver._core,
-                "find_pdf_url",
-                new_callable=AsyncMock,
-                return_value="https://core.ac.uk/pdf.pdf",
-            ),
-        ):
-            url, source = await resolver.resolve("10.1234/test", "Test Title")
+    async def test_cascade_fallback_to_second(self) -> None:
+        s1 = make_mock_source("first", return_url=None)
+        s2 = make_mock_source("second", return_url="https://core.ac.uk/pdf.pdf")
+        resolver = FulltextResolver([s1, s2])
+
+        url, source = await resolver.resolve("10.1234/test", "Test Title")
 
         assert url == "https://core.ac.uk/pdf.pdf"
-        assert source == "core"
+        assert source == "second"
 
-    async def test_cascade_fallback_to_libgen(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
-        assert resolver._unpaywall is not None
-        assert resolver._core is not None
-        assert resolver._libgen is not None
-        with (
-            patch.object(
-                resolver._unpaywall, "find_pdf_url", new_callable=AsyncMock, return_value=None
-            ),
-            patch.object(resolver._core, "find_pdf_url", new_callable=AsyncMock, return_value=None),
-            patch.object(
-                resolver._libgen,
-                "find_pdf_url",
-                new_callable=AsyncMock,
-                return_value="https://libgen.is/get.php?md5=abc",
-            ),
-        ):
-            url, source = await resolver.resolve("10.1234/test", "Test Title")
+    async def test_cascade_all_fail(self) -> None:
+        s1 = make_mock_source("first", return_url=None)
+        s2 = make_mock_source("second", return_url=None)
+        resolver = FulltextResolver([s1, s2])
 
-        assert url == "https://libgen.is/get.php?md5=abc"
-        assert source == "libgen"
-
-    async def test_cascade_all_fail(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
-        assert resolver._unpaywall is not None
-        assert resolver._core is not None
-        assert resolver._libgen is not None
-        with (
-            patch.object(
-                resolver._unpaywall, "find_pdf_url", new_callable=AsyncMock, return_value=None
-            ),
-            patch.object(resolver._core, "find_pdf_url", new_callable=AsyncMock, return_value=None),
-            patch.object(
-                resolver._libgen, "find_pdf_url", new_callable=AsyncMock, return_value=None
-            ),
-            pytest.raises(FulltextNotFoundError),
-        ):
+        with pytest.raises(FulltextNotFoundError):
             await resolver.resolve("10.1234/test", "Test Title")
 
-    async def test_cascade_error_continues(self, settings_all: Settings) -> None:
+    async def test_cascade_error_continues(self) -> None:
         """Source errors are non-fatal — cascade continues."""
-        resolver = FulltextResolver(settings_all)
-        assert resolver._unpaywall is not None
-        assert resolver._core is not None
-        with (
-            patch.object(
-                resolver._unpaywall,
-                "find_pdf_url",
-                new_callable=AsyncMock,
-                side_effect=FulltextSourceError("Unpaywall", "timeout"),
-            ),
-            patch.object(
-                resolver._core,
-                "find_pdf_url",
-                new_callable=AsyncMock,
-                return_value="https://core.ac.uk/pdf.pdf",
-            ),
-        ):
-            url, source = await resolver.resolve("10.1234/test", "Test Title")
+        s1 = make_mock_source("failing")
+        s1.find_pdf_url = AsyncMock(side_effect=FulltextSourceError("failing", "timeout"))
+        s2 = make_mock_source("working", return_url="https://core.ac.uk/pdf.pdf")
+        resolver = FulltextResolver([s1, s2])
 
-        assert source == "core"
+        url, source = await resolver.resolve("10.1234/test", "Test Title")
 
-    async def test_cascade_no_doi_skips_unpaywall(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
-        assert resolver._core is not None
-        with patch.object(
-            resolver._core,
-            "find_pdf_url",
-            new_callable=AsyncMock,
-            return_value="https://core.ac.uk/pdf.pdf",
-        ) as mock_core:
-            url, source = await resolver.resolve(None, "Test Title")
+        assert source == "working"
 
-        assert source == "core"
-        mock_core.assert_called_once_with(None, "Test Title")
+    async def test_cascade_title_only(self) -> None:
+        s1 = make_mock_source("source", return_url="https://example.com/pdf.pdf")
+        resolver = FulltextResolver([s1])
 
-    async def test_download_success(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
+        url, source = await resolver.resolve(None, "Test Title")
+
+        assert url == "https://example.com/pdf.pdf"
+        s1.find_pdf_url.assert_called_once_with(title="Test Title")
+
+    async def test_cascade_doi_and_title(self) -> None:
+        s1 = make_mock_source("source", return_url="https://example.com/pdf.pdf")
+        resolver = FulltextResolver([s1])
+
+        await resolver.resolve("10.1234/test", "Test Title")
+
+        s1.find_pdf_url.assert_called_once_with(doi="10.1234/test", title="Test Title")
+
+    async def test_download_success(self) -> None:
+        resolver = FulltextResolver([])
         pdf_bytes = make_pdf_bytes()
         mock_response = make_httpx_response(
             content=pdf_bytes,
@@ -386,8 +290,8 @@ class TestFulltextResolver:
 
         assert result == pdf_bytes
 
-    async def test_download_wrong_content_type(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
+    async def test_download_wrong_content_type(self) -> None:
+        resolver = FulltextResolver([])
         mock_response = make_httpx_response(
             content=b"<html>Not a PDF</html>",
             headers={"content-type": "text/html"},
@@ -399,8 +303,8 @@ class TestFulltextResolver:
         ):
             await resolver.download("https://example.com/not-a-pdf")
 
-    async def test_download_empty_pdf_body(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
+    async def test_download_empty_pdf_body(self) -> None:
+        resolver = FulltextResolver([])
         mock_response = make_httpx_response(
             content=b"",
             headers={"content-type": "application/pdf"},
@@ -412,8 +316,8 @@ class TestFulltextResolver:
         ):
             await resolver.download("https://example.com/empty.pdf")
 
-    async def test_download_http_error(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
+    async def test_download_http_error(self) -> None:
+        resolver = FulltextResolver([])
         mock_response = make_httpx_response(status_code=403)
 
         with (
@@ -422,8 +326,8 @@ class TestFulltextResolver:
         ):
             await resolver.download("https://example.com/forbidden.pdf")
 
-    def test_extract_text(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
+    def test_extract_text(self) -> None:
+        resolver = FulltextResolver([])
         pdf_bytes = make_pdf_bytes()
 
         with patch("yazot.pdf_utils.PdfReader") as mock_reader_cls:
@@ -437,10 +341,10 @@ class TestFulltextResolver:
 
         assert text == "Page 1 text"
 
-    def test_extract_text_pdf_parse_failure(self, settings_all: Settings) -> None:
+    def test_extract_text_pdf_parse_failure(self) -> None:
         from pypdf.errors import PdfReadError
 
-        resolver = FulltextResolver(settings_all)
+        resolver = FulltextResolver([])
         pdf_bytes = make_pdf_bytes()
 
         with (
@@ -452,8 +356,8 @@ class TestFulltextResolver:
         ):
             resolver.extract_text(pdf_bytes)
 
-    def test_extract_text_multiple_pages(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
+    def test_extract_text_multiple_pages(self) -> None:
+        resolver = FulltextResolver([])
         pdf_bytes = make_pdf_bytes()
 
         with patch("yazot.pdf_utils.PdfReader") as mock_reader_cls:
@@ -470,18 +374,14 @@ class TestFulltextResolver:
 
         assert text == "Page 1 text\n\nPage 2 text\n\nPage 3 text"
 
-    async def test_aclose_closes_all_clients(self, settings_all: Settings) -> None:
-        resolver = FulltextResolver(settings_all)
+    async def test_aclose_closes_all_sources(self) -> None:
+        s1 = make_mock_source("a")
+        s2 = make_mock_source("b")
+        resolver = FulltextResolver([s1, s2])
 
-        with (
-            patch.object(resolver._http, "aclose", new_callable=AsyncMock) as mock_http,
-            patch.object(resolver._unpaywall, "aclose", new_callable=AsyncMock) as mock_unpaywall,
-            patch.object(resolver._core, "aclose", new_callable=AsyncMock) as mock_core,
-            patch.object(resolver._libgen, "aclose", new_callable=AsyncMock) as mock_libgen,
-        ):
+        with patch.object(resolver._http, "aclose", new_callable=AsyncMock) as mock_http:
             await resolver.aclose()
 
         mock_http.assert_called_once()
-        mock_unpaywall.assert_called_once()
-        mock_core.assert_called_once()
-        mock_libgen.assert_called_once()
+        s1.aclose.assert_called_once()
+        s2.aclose.assert_called_once()
