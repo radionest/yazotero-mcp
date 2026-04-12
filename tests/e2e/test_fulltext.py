@@ -145,9 +145,9 @@ class TestMCPFulltextEndpoint:
         )
 
         response_tokens = len(response_json) // 4
-        assert (
-            response_tokens < 25000
-        ), f"Response exceeds MCP token limit: {response_tokens} tokens"
+        assert response_tokens < 25000, (
+            f"Response exceeds MCP token limit: {response_tokens} tokens"
+        )
 
     @pytest.mark.asyncio
     async def test_get_item_fulltext_chunking_workflow(
@@ -198,8 +198,8 @@ class TestMCPFulltextEndpoint:
                     default=str,
                 )
                 chunk_tokens = len(chunk_json) // 4
-                assert (
-                    chunk_tokens < 25000
-                ), f"Chunk {chunk_count} exceeds limit: {chunk_tokens} tokens"
+                assert chunk_tokens < 25000, (
+                    f"Chunk {chunk_count} exceeds limit: {chunk_tokens} tokens"
+                )
 
             assert len(all_content) > 0

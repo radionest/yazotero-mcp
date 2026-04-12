@@ -10,21 +10,22 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        name: ruff
+        entry: uv run ruff check --fix --exit-non-zero-on-fix
+        language: system
+        types: [python]
       - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.17.1
-    hooks:
+        name: ruff-format
+        entry: uv run ruff format
+        language: system
+        types: [python]
       - id: mypy
-        args: [--ignore-missing-imports]
+        name: mypy
+        entry: uv run mypy
+        language: system
         files: ^yazot/
-        additional_dependencies:
-          - pydantic>=2.0.0
-          - pydantic-settings>=2.0.0
-          - fastmcp>=2.0.0
-          - types-beautifulsoup4
+        pass_filenames: false
+        args: [yazot/]

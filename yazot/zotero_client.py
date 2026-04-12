@@ -653,7 +653,7 @@ class ZoteroClient(ZoteroClientProtocol):
             )
         except zotero_errors.UnsupportedParamsError as e:
             raise ZoteroError(
-                f"Invalid search parameters: {e}. " "Hint: check query, item_type, and tag values."
+                f"Invalid search parameters: {e}. Hint: check query, item_type, and tag values."
             ) from e
         except zotero_errors.PyZoteroError as e:
             raise ZoteroError(
@@ -805,7 +805,7 @@ class ZoteroClient(ZoteroClientProtocol):
             ) from e
         except Exception as e:
             raise ZoteroError(
-                f"Unexpected error attaching PDF to item '{item_key}': " f"{type(e).__name__}: {e}"
+                f"Unexpected error attaching PDF to item '{item_key}': {type(e).__name__}: {e}"
             ) from e
 
     @webonly

@@ -166,9 +166,9 @@ class TestSearchE2E:
 
         response_tokens = len(response_json) // 4
 
-        assert (
-            response_tokens < 25000
-        ), f"search_articles response exceeds MCP token limit: {response_tokens} tokens"
+        assert response_tokens < 25000, (
+            f"search_articles response exceeds MCP token limit: {response_tokens} tokens"
+        )
 
     @pytest.mark.asyncio
     async def test_chunked_response_workflow_stays_under_limit(
@@ -226,9 +226,9 @@ class TestSearchE2E:
                 )
                 chunk_tokens = len(response_json) // 4
 
-                assert (
-                    chunk_tokens < 25000
-                ), f"Chunk {chunk_count + 1} exceeds limit: {chunk_tokens} tokens"
+                assert chunk_tokens < 25000, (
+                    f"Chunk {chunk_count + 1} exceeds limit: {chunk_tokens} tokens"
+                )
 
                 chunk_count += 1
 

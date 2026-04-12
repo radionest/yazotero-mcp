@@ -214,7 +214,7 @@ class ZoteroInstance:
         if not self._wait_for_ready():
             self.stop()
             raise RuntimeError(
-                f"Zotero failed to start on port {self._port} " f"within {self._startup_timeout}s"
+                f"Zotero failed to start on port {self._port} within {self._startup_timeout}s"
             )
 
         logger.info(
@@ -390,6 +390,6 @@ def detect_xvfb_needed() -> bool:
         return False
     if not shutil.which("xvfb-run"):
         raise RuntimeError(
-            "No DISPLAY set and xvfb-run not found. " "Install xvfb or run with a display server."
+            "No DISPLAY set and xvfb-run not found. Install xvfb or run with a display server."
         )
     return True
