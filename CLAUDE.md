@@ -99,6 +99,9 @@ Configuration via `.env` (pydantic-settings). Two modes:
 
 For tests: `.env.test` (auto-loaded via `conftest.py`)
 
+**Important:** pydantic-settings loads `.env` internally but does NOT export values to `os.environ`.
+Tests use `load_dotenv(".env.test", override=True)` in `conftest.py` to export test config to `os.environ`.
+
 ## Conventions
 
 - All models — Pydantic v2 BaseModel (not dicts)
