@@ -385,3 +385,16 @@ class TestFulltextResolver:
         mock_http.assert_called_once()
         s1.aclose.assert_called_once()
         s2.aclose.assert_called_once()
+
+    async def test_aclose_continues_on_source_error(self) -> None:
+        """One broken source.aclose() must not prevent closing the rest."""
+        s1 = make_mock_source("broken")
+        s1.aclose = AsyncMock(side_effect=RuntimeError("close failed"))
+        s2 = make_mock_source("ok")
+        resolver = FulltextResolver([s1, s2])
+
+        with patch.object(resolver._http, "aclose", new_callable=AsyncMock):
+            await resolver.aclose()
+
+        s1.aclose.assert_called_once()
+        s2.aclose.assert_called_once()

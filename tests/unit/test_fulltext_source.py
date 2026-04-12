@@ -83,6 +83,19 @@ class TestDiscoverSources:
 
         assert len(sources) == 2
 
+    def test_skips_malformed_plugin_object(self) -> None:
+        """Factory returns an object that doesn't satisfy FulltextSource contract."""
+        malformed = MagicMock()
+        del malformed.name  # missing required attribute
+        ep = MagicMock()
+        ep.name = "malformed"
+        ep.load.return_value = MagicMock(return_value=malformed)
+
+        with patch("yazot.fulltext_source.importlib.metadata.entry_points", return_value=[ep]):
+            sources = discover_sources({})
+
+        assert sources == []
+
     def test_factory_receives_env(self) -> None:
         source = _make_source("test")
         ep = MagicMock()

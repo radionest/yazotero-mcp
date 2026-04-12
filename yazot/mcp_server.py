@@ -59,13 +59,21 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
         builtin_sources.append(CoreClient(settings.core_api_key))
     # Merge .env file values with os.environ for plugin discovery.
     # pydantic-settings loads .env internally but doesn't export to os.environ.
-    # Keys are uppercased for consistency (pydantic-settings is case-insensitive,
-    # but plugins expect uppercase env var names by convention).
+    # Read the same env files as Settings to keep plugin config consistent.
     from dotenv import dotenv_values
 
-    plugin_env: dict[str, str] = {
-        k.upper(): v for k, v in dotenv_values(".env").items() if v is not None
-    }
+    plugin_env: dict[str, str] = {}
+    raw_env_files = Settings.model_config.get("env_file", ())
+    if raw_env_files is None:
+        env_files: tuple[str, ...] = ()
+    elif isinstance(raw_env_files, str | os.PathLike):
+        env_files = (str(raw_env_files),)
+    else:
+        env_files = tuple(str(f) for f in raw_env_files)
+    for env_file in env_files:
+        plugin_env.update(
+            {k.upper(): v for k, v in dotenv_values(env_file).items() if v is not None}
+        )
     plugin_env.update({k.upper(): v for k, v in os.environ.items()})
     plugin_sources = discover_sources(plugin_env)
     resolver = FulltextResolver(builtin_sources + plugin_sources)

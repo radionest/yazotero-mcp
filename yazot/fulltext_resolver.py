@@ -221,6 +221,15 @@ class FulltextResolver:
             raise FulltextDownloadError("pdf", str(e)) from e
 
     async def aclose(self) -> None:
-        await self._http.aclose()
-        for source in self._sources:
-            await source.aclose()
+        try:
+            await self._http.aclose()
+        finally:
+            for source in self._sources:
+                try:
+                    await source.aclose()
+                except Exception:
+                    logger.warning(
+                        "Failed to close fulltext source %s",
+                        source.name,
+                        exc_info=True,
+                    )
