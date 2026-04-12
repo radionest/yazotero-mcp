@@ -862,28 +862,26 @@ async def update_item_tags(
     """
     router: ZoteroClientRouter = _deps(ctx)["router"]
 
+    item = await router.get_item(item_key)
+    existing_tags = item.data.tags
+    tags_before = [t.tag for t in existing_tags]
+
     if mode == "replace":
         new_tags = [ZoteroTag(tag=t, type=1) for t in tags]
-        tags_before: list[str] = []
-    else:
-        item = await router.get_item(item_key)
-        existing_tags = item.data.tags
-        tags_before = [t.tag for t in existing_tags]
-
-        if mode == "add":
-            existing_names = {t.tag for t in existing_tags}
-            new_tags = list(existing_tags)
-            for tag_name in tags:
-                if tag_name not in existing_names:
-                    new_tags.append(ZoteroTag(tag=tag_name, type=1))
-                    existing_names.add(tag_name)
-        else:  # mode == "remove"
-            remove_set = set(tags)
-            new_tags = [t for t in existing_tags if t.tag not in remove_set]
+    elif mode == "add":
+        existing_names = {t.tag for t in existing_tags}
+        new_tags = list(existing_tags)
+        for tag_name in tags:
+            if tag_name not in existing_names:
+                new_tags.append(ZoteroTag(tag=tag_name, type=1))
+                existing_names.add(tag_name)
+    else:  # mode == "remove"
+        remove_set = set(tags)
+        new_tags = [t for t in existing_tags if t.tag not in remove_set]
 
     tags_after = [t.tag for t in new_tags]
 
-    if mode != "replace" and tags_before == tags_after:
+    if tags_before == tags_after:
         return {
             "item_key": item_key,
             "mode": mode,
