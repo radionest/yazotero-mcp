@@ -16,7 +16,7 @@ jobs:
           cache-dependency-glob: uv.lock
       - run: uv sync --group dev
       - run: uv run ruff check yazot/ tests/
-      - run: uv run black --check yazot/ tests/
+      - run: uv run ruff format --check yazot/ tests/
       - run: uv run mypy yazot/
 
   unit-tests:
