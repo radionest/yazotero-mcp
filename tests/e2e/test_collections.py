@@ -3,7 +3,9 @@
 import pytest
 from fastmcp import Client
 
+from tests.e2e.conftest import parse_tool_result, parse_tool_result_dict
 from yazot.mcp_server import mcp
+from yazot.models import SearchCollectionResponse
 from yazot.zotero_client import ZoteroClient
 
 
@@ -25,7 +27,7 @@ class TestCollectionEndpoints:
                 "create_collection",
                 arguments={"name": collection_name},
             )
-            collection_data = result.data
+            collection_data = parse_tool_result_dict(result)
 
         # Verify collection was created
         assert collection_data is not None
@@ -52,7 +54,7 @@ class TestCollectionEndpoints:
                 "create_collection",
                 arguments={"name": parent_name},
             )
-            parent_data = parent_result.data
+            parent_data = parse_tool_result_dict(parent_result)
 
         # Create subcollection
         child_name = "Neural Networks"
@@ -64,7 +66,7 @@ class TestCollectionEndpoints:
                     "parent_collection_key": parent_data["key"],
                 },
             )
-            child_data = child_result.data
+            child_data = parse_tool_result_dict(child_result)
 
         # Verify subcollection was created
         assert child_data is not None
@@ -91,7 +93,7 @@ class TestCollectionEndpoints:
                 "create_collection",
                 arguments={"name": collection_name},
             )
-            collection_data = result.data
+            collection_data = parse_tool_result_dict(result)
 
         # Verify collection was created with correct name
         assert collection_data is not None
@@ -133,7 +135,7 @@ class TestAddItemsToCollection:
                 },
             )
 
-        assert "Added 1 item(s)" in str(result.data)
+        assert "Added 1 item(s)" in result.content[0].text
 
         # Verify item is in the collection
         async with Client(mcp) as client:
@@ -141,7 +143,7 @@ class TestAddItemsToCollection:
                 "get_collection_items",
                 arguments={"collection_key": collection_key},
             )
-            coll_items = coll_result.data
+            coll_items = parse_tool_result(coll_result, SearchCollectionResponse)
 
         found_keys = {item.key for item in coll_items.items}
         assert item_key in found_keys

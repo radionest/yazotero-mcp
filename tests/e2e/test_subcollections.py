@@ -3,7 +3,9 @@
 import pytest
 from fastmcp import Client
 
+from tests.e2e.conftest import parse_tool_result
 from yazot.mcp_server import mcp
+from yazot.models import SearchCollectionResponse
 from yazot.zotero_client import ZoteroClient
 
 
@@ -23,7 +25,7 @@ class TestSubcollections:
 
         async with Client(mcp) as client:
             result = await client.call_tool("get_collection_items", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Should return only items from main collection
         assert response.count == expected_count
@@ -42,7 +44,7 @@ class TestSubcollections:
 
         async with Client(mcp) as client:
             result = await client.call_tool("get_collection_items", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Should return only items from parent collection
         assert response.count == parent_count
@@ -61,7 +63,7 @@ class TestSubcollections:
 
         async with Client(mcp) as client:
             result = await client.call_tool("get_collection_items", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Should return items from parent + all subcollections
         assert response.count == total_count
@@ -84,7 +86,7 @@ class TestSubcollections:
 
         async with Client(mcp) as client:
             result = await client.call_tool("get_collection_items", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Total count should be sum of all levels
         expected_total = sum(counts.values())
@@ -104,7 +106,7 @@ class TestSubcollections:
 
         async with Client(mcp) as client:
             result = await client.call_tool("get_collection_items", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Should return only unique items
         assert response.count == unique_count
@@ -127,7 +129,7 @@ class TestSubcollections:
 
         async with Client(mcp) as client:
             result = await client.call_tool("get_collection_items", arguments=request)
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
         # Should return only items from parent (subcollections are empty)
         assert response.count == expected_count
@@ -148,7 +150,7 @@ class TestSubcollections:
                 "get_collection_items",
                 arguments={"collection_key": parent_key, "include_subcollections": True},
             )
-            response = result.data
+            response = parse_tool_result(result, SearchCollectionResponse)
 
             # With small chunk size, chunking should be triggered
             if response.has_more:
@@ -164,7 +166,7 @@ class TestSubcollections:
                     result = await client.call_tool(
                         "get_next_chunk", arguments={"chunk_id": chunk_id}
                     )
-                    response = result.data
+                    response = parse_tool_result(result, SearchCollectionResponse)
                     all_items.extend(response.items)
                     chunk_id = response.chunk_id
 

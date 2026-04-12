@@ -4,7 +4,9 @@ import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
+from tests.e2e.conftest import parse_tool_result, parse_tool_result_dict
 from tests.e2e.test_helpers import ZoteroTestDataManager
+from yazot.models import ZoteroItem
 from yazot.zotero_client import ZoteroClient
 
 
@@ -25,12 +27,12 @@ class TestAddItemByDOI:
             "add_item_by_doi",
             arguments={"doi": doi},
         )
-        item = result.data
+        item = parse_tool_result(result, ZoteroItem)
 
         assert item is not None
         assert item.key
         assert item.data.title
-        assert doi == item.data.DOI
+        assert doi == item.data.doi
         assert len(item.data.creators) > 0
 
         await test_zotero_client.delete_item_by_key(item.key)
@@ -50,7 +52,7 @@ class TestAddItemByDOI:
             "add_item_by_doi",
             arguments={"doi": doi, "tags": tags},
         )
-        item = result.data
+        item = parse_tool_result(result, ZoteroItem)
 
         assert item is not None
         assert item.key
@@ -72,7 +74,7 @@ class TestAddItemByDOI:
             "create_collection",
             arguments={"name": "Test DOI Collection"},
         )
-        collection_data = coll_result.data
+        collection_data = parse_tool_result_dict(coll_result)
 
         doi = "10.1038/nature12373"
         item_result = await mcp_client.call_tool(
@@ -82,7 +84,7 @@ class TestAddItemByDOI:
                 "collection_key": collection_data["key"],
             },
         )
-        item = item_result.data
+        item = parse_tool_result(item_result, ZoteroItem)
 
         assert item is not None
         assert collection_data["key"] in item.data.collections
@@ -104,10 +106,10 @@ class TestAddItemByDOI:
             "add_item_by_doi",
             arguments={"doi": doi_url},
         )
-        item = result.data
+        item = parse_tool_result(result, ZoteroItem)
 
         assert item is not None
-        assert item.data.DOI == "10.1038/nature12373"
+        assert item.data.doi == "10.1038/nature12373"
 
         await test_zotero_client.delete_item_by_key(item.key)
 
