@@ -314,9 +314,9 @@ class TestResponseChunker:
         first_chunk_tokens = chunker.estimate_response_tokens(response.items, include_metadata=True)
 
         # First chunk should be under MCP limit
-        assert (
-            first_chunk_tokens < chunker.MCP_TOKEN_LIMIT
-        ), f"First chunk has {first_chunk_tokens} tokens, exceeds MCP limit of {chunker.MCP_TOKEN_LIMIT}"
+        assert first_chunk_tokens < chunker.MCP_TOKEN_LIMIT, (
+            f"First chunk has {first_chunk_tokens} tokens, exceeds MCP limit of {chunker.MCP_TOKEN_LIMIT}"
+        )
 
         # Check all subsequent chunks
         chunk_id = response.chunk_id
@@ -326,9 +326,9 @@ class TestResponseChunker:
                 next_response.items, include_metadata=True
             )
 
-            assert (
-                chunk_tokens < chunker.MCP_TOKEN_LIMIT
-            ), f"Chunk {next_response.current_chunk} has {chunk_tokens} tokens, exceeds MCP limit"
+            assert chunk_tokens < chunker.MCP_TOKEN_LIMIT, (
+                f"Chunk {next_response.current_chunk} has {chunk_tokens} tokens, exceeds MCP limit"
+            )
 
             chunk_id = next_response.chunk_id if next_response.has_more else None
 

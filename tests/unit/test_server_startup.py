@@ -44,9 +44,9 @@ class TestMCPServerStartup:
         ]
 
         for expected_resource in expected_resources:
-            assert (
-                expected_resource in resource_uris
-            ), f"Resource {expected_resource} not registered"
+            assert expected_resource in resource_uris, (
+                f"Resource {expected_resource} not registered"
+            )
 
     async def test_mcp_server_metadata(self) -> None:
         """Test that server has correct metadata."""
