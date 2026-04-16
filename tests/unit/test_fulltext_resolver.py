@@ -241,11 +241,18 @@ class TestFulltextResolver:
         return Settings(
             zotero_local=True,
             unpaywall_email="test@example.com",
+            core_api_key=None,
+            fulltext_libgen_enabled=False,
         )
 
     @pytest.fixture
     def settings_none(self) -> Settings:
-        return Settings(zotero_local=True)
+        return Settings(
+            zotero_local=True,
+            unpaywall_email=None,
+            core_api_key=None,
+            fulltext_libgen_enabled=False,
+        )
 
     def test_is_configured_all(self, settings_all: Settings) -> None:
         resolver = FulltextResolver(settings_all)
