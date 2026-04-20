@@ -1,5 +1,9 @@
 """Unit tests for formatting utilities in formatters.py module."""
 
+import logging
+
+import pytest
+
 from yazot.formatters import extract_note_text, format_note_html
 
 
@@ -100,6 +104,47 @@ class TestExtractNoteText:
     def test_nested_tags(self) -> None:
         result = extract_note_text("<div><div><p>Deep content</p></div></div>")
         assert "Deep content" in result
+
+
+class TestExtractNoteTextUnicode:
+    """Tests for Unicode handling in extract_note_text()."""
+
+    def test_cyrillic_text_preserved(self) -> None:
+        html = "<p>Перитонеальные рецепторы</p>"
+        result = extract_note_text(html)
+        assert "Перитонеальные рецепторы" in result
+
+    def test_replacement_char_removed(self) -> None:
+        html = "<p>перитон\ufffdальные</p>"
+        result = extract_note_text(html)
+        assert "\ufffd" not in result
+        assert "перитон" in result
+        assert "альные" in result
+
+    def test_replacement_char_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        html = "<p>перитон\ufffdальные</p>"
+        with caplog.at_level(logging.WARNING, logger="yazot.formatters"):
+            extract_note_text(html)
+        assert "U+FFFD" in caplog.text
+
+    def test_nfc_normalization(self) -> None:
+        # e + combining acute = decomposed form, should normalize to NFC
+        html = "<p>e\u0301</p>"
+        result = extract_note_text(html)
+        assert "\u00e9" in result  # NFC form
+
+    def test_mixed_scripts_preserved(self) -> None:
+        html = "<p>English and 中文 and العربية</p>"
+        result = extract_note_text(html)
+        assert "English" in result
+        assert "中文" in result
+        assert "العربية" in result
+
+    def test_clean_text_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        html = "<p>Clean text without issues</p>"
+        with caplog.at_level(logging.WARNING, logger="yazot.formatters"):
+            extract_note_text(html)
+        assert "U+FFFD" not in caplog.text
 
 
 class TestRoundtrip:
