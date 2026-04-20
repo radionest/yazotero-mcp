@@ -1,12 +1,20 @@
 """Formatting utilities for note content conversion."""
 
 import html
+import logging
+import unicodedata
 from collections.abc import Sequence
 from datetime import datetime
 
 import markdown as md
 import markdownify
 from bs4 import BeautifulSoup, Tag
+
+logger = logging.getLogger(__name__)
+
+REPLACEMENT_CHAR = "\ufffd"
+_replacement_char_notes_logged = 0
+_REPLACEMENT_LOG_LIMIT = 10
 
 type NoteData = dict[str, str | int | float | Sequence[str | int | float | NoteData] | NoteData]
 
@@ -19,7 +27,24 @@ def format_note_html(text: str) -> str:
 def extract_note_text(html_content: str) -> str:
     """Convert HTML note back to readable markdown."""
     result: str = markdownify.markdownify(html_content, heading_style="ATX")
-    return result.strip()
+    result = result.strip()
+    result = unicodedata.normalize("NFC", result)
+    if REPLACEMENT_CHAR in result:
+        global _replacement_char_notes_logged
+        _replacement_char_notes_logged += 1
+        if _replacement_char_notes_logged <= _REPLACEMENT_LOG_LIMIT:
+            logger.warning(
+                "Note contains %d U+FFFD replacement characters — "
+                "likely encoding issue in Zotero API response",
+                result.count(REPLACEMENT_CHAR),
+            )
+            if _replacement_char_notes_logged == _REPLACEMENT_LOG_LIMIT:
+                logger.warning(
+                    "Further U+FFFD warnings suppressed (limit %d reached)",
+                    _REPLACEMENT_LOG_LIMIT,
+                )
+        result = result.replace(REPLACEMENT_CHAR, "")
+    return result
 
 
 def parse_datetime(date_str: str) -> datetime:
