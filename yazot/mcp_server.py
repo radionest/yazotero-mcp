@@ -369,6 +369,30 @@ async def create_note_for_item(
     return note
 
 
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
+async def update_note_for_item(
+    note_key: str,
+    content: str | dict[str, Any],
+    ctx: Context,
+) -> Note:
+    """
+    Update an existing note's content in-place by note key.
+
+    Use this instead of creating a new note when you need to fix or revise
+    content (e.g., correcting quotes after failed verification).
+    To manage tags, use update_item_tags separately.
+
+    Args:
+        note_key: The Zotero key of the note to update
+        content: New note content - plain text string or structured dict
+
+    Returns:
+        Updated Note object with key, content, timestamps, and tags
+    """
+    note_manager: NoteManager = _deps(ctx)["note_manager"]
+    return await note_manager.update_note(note_key=note_key, content=content)
+
+
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def get_item_notes(item_key: str, ctx: Context) -> list[Note]:
     """

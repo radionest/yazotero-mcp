@@ -8,7 +8,7 @@ from .formatters import (
     format_note_html,
     parse_datetime,
 )
-from .models import ItemCreate, Note, ZoteroTag
+from .models import ItemCreate, ItemUpdate, Note, ZoteroTag
 
 if TYPE_CHECKING:
     from .protocols import ZoteroClientProtocol
@@ -70,6 +70,27 @@ class NoteManager:
             modified=parse_datetime(created_note.data.date_modified),
             tags=tags or [],
         )
+
+    async def update_note(self, note_key: str, content: str | dict[str, Any]) -> Note:
+        """Update an existing note's content in-place."""
+        is_html = False
+        match content:
+            case dict():
+                content_str = format_dict_to_html(content)
+                is_html = True
+            case str():
+                try:
+                    content_dict = json.loads(content)
+                    content_str = format_dict_to_html(content_dict)
+                    is_html = True
+                except (json.JSONDecodeError, ValueError):
+                    content_str = content
+            case _:
+                content_str = str(content)
+
+        note_html = content_str if is_html else format_note_html(content_str)
+        await self.client.update_item(note_key, ItemUpdate(note=note_html))
+        return await self.get_note(note_key)
 
     async def get_notes_for_item(self, item_key: str) -> list[Note]:
         """Get all notes for a specific item."""
