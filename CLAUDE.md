@@ -86,6 +86,7 @@ uv run prek run --all-files
 - To resume work in an existing worktree — use `EnterWorktree` with the same name. Never `cd` into the worktree path directly
 - Worktrees contain only git-tracked files. `hooks/`, `settings.json`, `settings.local.json` live in `$CLAUDE_PROJECT_DIR/.claude/` and are shared — edit them from the main project path
 - `ExitWorktree(remove)` requires `discard_changes=true` if there are commits not in main (even if already pushed)
+- **PR creation**: global hook `pre-pr-review.sh` blocks `gh pr create` until `pr-diff-reviewer` agent completes. Run the review agent FIRST, wait for result, then create PR. Do NOT run both in parallel.
 - The Stop hook blocks session end in a worktree — ask the user to choose:
   1. **Push + PR**: commit all, `git push -u origin <branch>`, `gh pr create`, then `ExitWorktree(remove, discard_changes=true)`
   2. **Keep**: `ExitWorktree(keep)` — worktree stays for later

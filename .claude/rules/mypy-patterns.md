@@ -26,3 +26,10 @@ for result in results:
         continue
     # here result is narrowed to T
 ```
+
+# type: ignore и import stubs
+
+Проект использует `ignore_missing_imports = true` (pyproject.toml) — mypy НЕ ругается на импорт библиотек без стабов.
+Не добавляй `# type: ignore[import-untyped]` превентивно. Сначала запусти `uv run mypy yazot/`.
+
+`warn_unused_ignores = true` — лишние `type: ignore` комментарии вызывают ошибку.
