@@ -226,15 +226,17 @@ class CrossrefClient:
         for author in crossref_data.author:
             creator = {"creatorType": "author"}
 
-            # Crossref uses "given" and "family" for names
-            if author.family:
-                creator["lastName"] = author.family
-            if author.given:
+            if author.given and author.family:
                 creator["firstName"] = author.given
+                creator["lastName"] = author.family
+            elif author.family:
+                creator["name"] = author.family
+            elif author.given:
+                creator["name"] = author.given
+            else:
+                continue
 
-            # Only add if we have at least one name component
-            if "lastName" in creator or "firstName" in creator:
-                creators.append(creator)
+            creators.append(creator)
 
         # Build Zotero item
         zotero_item = {

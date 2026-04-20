@@ -408,7 +408,7 @@ class CollectionCreate(BaseModel):
 class ZoteroFailedItem(BaseModel):
     """Failed item details from Zotero write operations."""
 
-    key: str
+    key: str | None = None
     code: int
     message: str
 
