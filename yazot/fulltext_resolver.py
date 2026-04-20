@@ -4,11 +4,10 @@ import logging
 from urllib.parse import quote
 
 import httpx
-from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 
-from .config import Settings
 from .exceptions import FulltextDownloadError, FulltextNotFoundError, FulltextSourceError
+from .fulltext_source import FulltextSource
 from .pdf_utils import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
@@ -51,7 +50,7 @@ class CoreSearchResponse(BaseModel):
     model_config = {"populate_by_name": True, "extra": "allow"}
 
 
-# --- API Clients ---
+# --- Built-in sources ---
 
 
 class UnpaywallClient:
@@ -64,8 +63,18 @@ class UnpaywallClient:
         self.email = email
         self.client = httpx.AsyncClient(timeout=self.TIMEOUT)
 
-    async def find_pdf_url(self, doi: str) -> str | None:
+    @property
+    def name(self) -> str:
+        return "unpaywall"
+
+    @property
+    def description(self) -> str:
+        return "Unpaywall — legal open-access PDF discovery by DOI"
+
+    async def find_pdf_url(self, *, doi: str | None = None, title: str | None = None) -> str | None:
         """Find open-access PDF URL for a DOI via Unpaywall."""
+        if not doi:
+            return None
         url = f"{self.BASE_URL}/{quote(doi, safe='')}"
         try:
             response = await self.client.get(url, params={"email": self.email})
@@ -102,7 +111,15 @@ class CoreClient:
             headers={"Authorization": f"Bearer {api_key}"},
         )
 
-    async def find_pdf_url(self, doi: str | None, title: str | None) -> str | None:
+    @property
+    def name(self) -> str:
+        return "core"
+
+    @property
+    def description(self) -> str:
+        return "CORE — academic fulltext aggregator, search by DOI or title"
+
+    async def find_pdf_url(self, *, doi: str | None = None, title: str | None = None) -> str | None:
         """Search CORE for a PDF download URL."""
         query = f'doi:"{doi}"' if doi else title
         if not query:
@@ -129,92 +146,51 @@ class CoreClient:
         await self.client.aclose()
 
 
-class LibgenClient:
-    """Client for Library Genesis article search (gray zone)."""
-
-    TIMEOUT = 45
-
-    def __init__(self, mirror: str) -> None:
-        self.mirror = mirror.rstrip("/")
-        self.client = httpx.AsyncClient(timeout=self.TIMEOUT, follow_redirects=True)
-
-    async def find_pdf_url(self, title: str) -> str | None:
-        """Search Libgen Sci-Tech for article PDF URL by title."""
-        search_url = f"{self.mirror}/search.php"
-        try:
-            response = await self.client.get(
-                search_url,
-                params={"req": title, "res": "25", "column": "title"},
-            )
-            response.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            raise FulltextSourceError("Libgen", f"HTTP {e.response.status_code}") from e
-        except httpx.RequestError as e:
-            raise FulltextSourceError("Libgen", str(e)) from e
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        # Libgen search results table contains MD5 links
-        for link in soup.select("table.c a[href*='md5=']"):
-            href = link.get("href", "")
-            if isinstance(href, str) and "md5=" in href:
-                # Extract MD5 and build direct download URL
-                md5_start = href.index("md5=") + 4
-                md5 = href[md5_start : md5_start + 32]
-                if len(md5) == 32:
-                    return f"{self.mirror}/get.php?md5={md5}"
-        return None
-
-    async def aclose(self) -> None:
-        await self.client.aclose()
-
-
 # --- Cascade Resolver ---
 
 
 class FulltextResolver:
-    """Cascading resolver: Unpaywall → CORE → Libgen (if enabled)."""
+    """Cascading resolver: iterates over sources in order until one returns a PDF URL."""
 
-    def __init__(self, settings: Settings) -> None:
-        self._unpaywall = (
-            UnpaywallClient(settings.unpaywall_email) if settings.unpaywall_email else None
-        )
-        self._core = CoreClient(settings.core_api_key) if settings.core_api_key else None
-        self._libgen = (
-            LibgenClient(settings.fulltext_libgen_mirror)
-            if settings.fulltext_libgen_enabled
-            else None
-        )
+    def __init__(self, sources: list[FulltextSource]) -> None:
+        self._sources = sources
         self._http = httpx.AsyncClient(timeout=60, follow_redirects=True)
 
     @property
     def is_configured(self) -> bool:
-        return any([self._unpaywall, self._core, self._libgen])
+        return len(self._sources) > 0
+
+    @property
+    def sources(self) -> list[FulltextSource]:
+        return list(self._sources)
 
     async def resolve(self, doi: str | None, title: str | None) -> tuple[str, str]:
         """Find PDF URL through cascade. Returns (pdf_url, source_name)."""
-        if doi and self._unpaywall:
-            try:
-                url = await self._unpaywall.find_pdf_url(doi)
-                if url:
-                    return url, "unpaywall"
-            except FulltextSourceError as e:
-                logger.warning("Unpaywall failed for %s: %s", doi, e)
+        if doi is not None:
+            doi = doi.strip() or None
+        if title is not None:
+            title = title.strip() or None
 
-        if self._core and (doi or title):
-            try:
-                url = await self._core.find_pdf_url(doi, title)
-                if url:
-                    return url, "core"
-            except FulltextSourceError as e:
-                logger.warning("CORE failed for doi=%s title=%s: %s", doi, title, e)
+        if doi is None and title is None:
+            raise FulltextNotFoundError(doi=doi, title=title)
 
-        if title and self._libgen:
+        for source in self._sources:
             try:
-                url = await self._libgen.find_pdf_url(title)
+                if doi is not None:
+                    url = await source.find_pdf_url(doi=doi, title=title)
+                else:
+                    # title is guaranteed non-None by the early guard above
+                    url = await source.find_pdf_url(title=title)  # type: ignore[arg-type]
                 if url:
-                    return url, "libgen"
+                    return url, source.name
             except FulltextSourceError as e:
-                logger.warning("Libgen failed for %s: %s", title, e)
+                logger.warning("%s failed: %s", source.name, e)
+            except Exception:
+                logger.warning(
+                    "Unexpected failure from fulltext source %s",
+                    source.name,
+                    exc_info=True,
+                )
 
         raise FulltextNotFoundError(doi=doi, title=title)
 
@@ -245,10 +221,15 @@ class FulltextResolver:
             raise FulltextDownloadError("pdf", str(e)) from e
 
     async def aclose(self) -> None:
-        await self._http.aclose()
-        if self._unpaywall:
-            await self._unpaywall.aclose()
-        if self._core:
-            await self._core.aclose()
-        if self._libgen:
-            await self._libgen.aclose()
+        try:
+            await self._http.aclose()
+        finally:
+            for source in self._sources:
+                try:
+                    await source.aclose()
+                except Exception:
+                    logger.warning(
+                        "Failed to close fulltext source %s",
+                        source.name,
+                        exc_info=True,
+                    )
