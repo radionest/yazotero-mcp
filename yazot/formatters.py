@@ -4,24 +4,22 @@ import html
 from collections.abc import Sequence
 from datetime import datetime
 
+import markdown as md
+import markdownify
 from bs4 import BeautifulSoup, Tag
 
 type NoteData = dict[str, str | int | float | Sequence[str | int | float | NoteData] | NoteData]
 
 
 def format_note_html(text: str) -> str:
-    """Format plain text as HTML note."""
-    # Escape HTML and convert newlines
-    text = html.escape(text)
-    text = text.replace("\n\n", "</p><p>")
-    text = text.replace("\n", "<br>")
-    return f"<p>{text}</p>"
+    """Convert markdown text to HTML for Zotero notes."""
+    return md.markdown(text, extensions=["extra"])
 
 
 def extract_note_text(html_content: str) -> str:
-    """Extract plain text from HTML note."""
-    soup = BeautifulSoup(html_content, "html.parser")
-    return soup.get_text().strip()
+    """Convert HTML note back to readable markdown."""
+    result: str = markdownify.markdownify(html_content, heading_style="ATX")
+    return result.strip()
 
 
 def parse_datetime(date_str: str) -> datetime:
