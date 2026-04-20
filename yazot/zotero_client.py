@@ -753,30 +753,45 @@ class ZoteroClient(ZoteroClientProtocol):
     async def add_to_collection(self, collection_key: str, items: list[ZoteroItem]) -> None:
         """Add items to a collection."""
         for item in items:
-            try:
-                await self._call(
-                    self._client.addto_collection,
-                    collection_key,
-                    item.model_dump(by_alias=True),
-                )
-            except zotero_errors.ResourceNotFoundError as e:
-                raise ZoteroNotFoundError("collection", collection_key) from e
-            except zotero_errors.UserNotAuthorisedError as e:
+            await self._add_item_to_collection(collection_key, item)
+
+    async def _add_item_to_collection(
+        self, collection_key: str, item: ZoteroItem, *, retried: bool = False
+    ) -> None:
+        """Add a single item to a collection, retrying once on version conflict."""
+        try:
+            await self._call(
+                self._client.addto_collection,
+                collection_key,
+                item.model_dump(by_alias=True),
+            )
+        except zotero_errors.PreConditionFailedError as e:
+            if retried:
                 raise ZoteroError(
-                    f"Not authorized to modify collection '{collection_key}'. "
-                    "Hint: check that ZOTERO_API_KEY has write permissions."
+                    f"Version conflict for item '{item.key}' in collection '{collection_key}' "
+                    "after retry. Hint: the item is being modified by another client."
                 ) from e
-            except zotero_errors.PyZoteroError as e:
-                raise ZoteroError(
-                    f"Failed to add item '{item.key}' to collection '{collection_key}': {e}. "
-                    "Hint: verify the collection key exists and credentials are correct."
-                ) from e
-            except Exception as e:
-                raise ZoteroError(
-                    f"Unexpected error adding item '{item.key}' to collection "
-                    f"'{collection_key}': {type(e).__name__}: {e}. "
-                    "Hint: check network connectivity and web API credentials."
-                ) from e
+            logger.debug("Version conflict for item '%s', re-fetching and retrying", item.key)
+            fresh_item = await self.get_item(item.key)
+            await self._add_item_to_collection(collection_key, fresh_item, retried=True)
+        except zotero_errors.ResourceNotFoundError as e:
+            raise ZoteroNotFoundError("collection", collection_key) from e
+        except zotero_errors.UserNotAuthorisedError as e:
+            raise ZoteroError(
+                f"Not authorized to modify collection '{collection_key}'. "
+                "Hint: check that ZOTERO_API_KEY has write permissions."
+            ) from e
+        except zotero_errors.PyZoteroError as e:
+            raise ZoteroError(
+                f"Failed to add item '{item.key}' to collection '{collection_key}': {e}. "
+                "Hint: verify the collection key exists and credentials are correct."
+            ) from e
+        except Exception as e:
+            raise ZoteroError(
+                f"Unexpected error adding item '{item.key}' to collection "
+                f"'{collection_key}': {type(e).__name__}: {e}. "
+                "Hint: check network connectivity and web API credentials."
+            ) from e
 
     @webonly
     async def attach_pdf(self, item_key: str, filepath: str) -> None:
