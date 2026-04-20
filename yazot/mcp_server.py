@@ -92,6 +92,10 @@ If `has_more=True`, call `get_next_chunk` (search results) or `get_next_fulltext
 1. `search_articles(query="machine learning")` or `get_collection_items(collection_key="ABC123")`
 2. If `has_more=True`, call `get_next_chunk(chunk_id)` repeatedly
 3. For specific item, call `get_item_fulltext(item_key)`
+   **Note:** `search_articles` does NOT indicate fulltext availability.
+   If `get_item_fulltext` returns "No fulltext available", try `fetch_external_fulltext(item_key)` —
+   it downloads PDFs from open access sources (Unpaywall, CORE) and attaches them to the item.
+   Do NOT try `get_item_fulltext` on many items hoping to find one with text.
 4. If fulltext `has_more=True`, call `get_next_fulltext_chunk(chunk_id)` repeatedly
 
 **Fetch fulltext from external sources:**
