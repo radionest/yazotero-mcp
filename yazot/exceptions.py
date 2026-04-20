@@ -46,7 +46,8 @@ class ZoteroWriteError(ZoteroError):
     Args:
         operation: Type of operation (e.g., 'create_items', 'create_collections')
         failures: Dict mapping request indices to failure details
-                 Format: {"0": {"key": "", "code": 400, "message": "..."}, ...}
+                 Format: {"0": {"code": 400, "message": "...", "key": "..."}, ...}
+                 Note: "key" may be absent in HTTP 4xx validation errors
 
     Attributes:
         operation: Operation type that failed
