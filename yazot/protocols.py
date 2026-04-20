@@ -127,13 +127,6 @@ class ZoteroClientProtocol(Protocol):
         """Get text by downloading and parsing PDF directly."""
         ...
 
-    async def get_item_fulltext(self, item_key: str) -> str | None:
-        """Get fulltext: try indexed API first, then PDF parsing fallback.
-
-        Finds PDF attachment once and reuses for both methods.
-        """
-        ...
-
     async def search_items(self, search_params: ZoteroSearchParams) -> list["ZoteroItem"]:
         """Search items across entire library with Zotero API parameters.
 

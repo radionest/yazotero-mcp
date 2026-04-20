@@ -53,7 +53,10 @@ class NoteVerifier:
 
     async def _get_fulltext(self, item_key: str) -> str | None:
         """Get fulltext for item, trying indexed API then PDF fallback."""
-        return await self.client.get_item_fulltext(item_key)
+        text = await self.client.get_fulltext(item_key)
+        if text:
+            return text
+        return await self.client.get_pdf_text(item_key)
 
     async def _add_tag_to_note(self, note_key: str, tag: str) -> None:
         """Add a tag to a note, preserving existing tags."""

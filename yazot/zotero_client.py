@@ -373,10 +373,24 @@ class ZoteroClient(ZoteroClientProtocol):
 
             fulltext_data = await self._call(self._client.fulltext_item, pdf_key)
             content = fulltext_data.get("content")
+            indexed_chars = fulltext_data.get("indexedChars")
+            total_chars = fulltext_data.get("totalChars")
+            is_truncated = (
+                indexed_chars is not None
+                and total_chars is not None
+                and indexed_chars < total_chars
+            )
 
-            if content:
+            if content and not is_truncated:
                 self._cache[cache_key] = content
                 return str(content)
+            if content and is_truncated:
+                logger.info(
+                    "Indexed fulltext truncated for %s (%d/%d chars), skipping",
+                    item_key,
+                    indexed_chars,
+                    total_chars,
+                )
 
         except (zotero_errors.ResourceNotFoundError, KeyError, ValueError):
             # No fulltext available for this item — safe to cache
@@ -427,55 +441,6 @@ class ZoteroClient(ZoteroClientProtocol):
             # Transient error (network, PDF parsing) — do NOT cache, allow retry
             logger.warning("Failed to get PDF text for item %s", item_key, exc_info=True)
 
-        return None
-
-    async def get_item_fulltext(self, item_key: str) -> str | None:
-        """Get fulltext for item: try indexed API first, then PDF parsing fallback.
-
-        Finds PDF attachment key once and reuses it for both extraction methods,
-        avoiding duplicate API calls.
-
-        Args:
-            item_key: Item key (parent item or PDF attachment itself)
-
-        Returns:
-            Text content, or None if not available
-        """
-        cache_key = f"item_fulltext:{item_key}"
-        if cache_key in self._cache:
-            cached = self._cache[cache_key]
-            return cached if isinstance(cached, str) else None
-
-        pdf_key = await self._find_pdf_attachment_key(item_key)
-        if not pdf_key:
-            self._cache[cache_key] = None
-            return None
-
-        # 1. Try Zotero's indexed fulltext API (fast)
-        try:
-            fulltext_data = await _run_sync(self._client.fulltext_item, pdf_key)
-            content = fulltext_data.get("content")
-            if content:
-                self._cache[cache_key] = str(content)
-                return str(content)
-        except (zotero_errors.ResourceNotFoundError, KeyError, ValueError):
-            pass
-        except Exception:
-            logger.warning("Failed to get indexed fulltext for %s", item_key, exc_info=True)
-
-        # 2. Fallback: download and parse PDF directly
-        try:
-            pdf_bytes = await _run_sync(self._client.file, pdf_key)
-            text = extract_text_from_pdf(pdf_bytes)
-            if text:
-                self._cache[cache_key] = text
-                return text
-        except (zotero_errors.ResourceNotFoundError, KeyError, ValueError):
-            pass
-        except Exception:
-            logger.warning("Failed to parse PDF for %s", item_key, exc_info=True)
-
-        self._cache[cache_key] = None
         return None
 
     async def get_item(self, item_key: str) -> ZoteroItem:

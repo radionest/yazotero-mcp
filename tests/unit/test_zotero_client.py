@@ -1,4 +1,4 @@
-"""Tests for ZoteroClient.add_to_collection retry logic."""
+"""Tests for ZoteroClient: add_to_collection retry, fulltext truncation detection."""
 
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -28,15 +28,17 @@ def _make_item(key: str = "TESTKEY1", version: int = 100) -> ZoteroItem:
     )
 
 
-def _make_zotero_client() -> Any:
+def _make_zotero_client(*, mode: str = "web") -> Any:
     """Create a ZoteroClient with mocked internals for unit testing."""
     with patch("yazot.zotero_client.ZoteroClient.__init__", return_value=None):
         from yazot.zotero_client import ZoteroClient
 
         zc = ZoteroClient.__new__(ZoteroClient)
-        zc._mode = "web"
+        zc._mode = mode
         zc._client = MagicMock()  # pyzotero client stub
         zc._call = AsyncMock(return_value=None)
+        zc._cache = {}
+        zc._semaphore = None
         return zc
 
 
@@ -97,3 +99,41 @@ class TestAddToCollectionRetry:
             await zc._add_item_to_collection("COLL1", item)
 
         zc._call.assert_called_once()
+
+
+class TestFulltextTruncationDetection:
+    """Test that truncated indexed fulltext is detected and skipped."""
+
+    @pytest.mark.asyncio
+    async def test_get_fulltext_returns_none_on_truncation(self) -> None:
+        """get_fulltext (indexed-only) should return None when text is truncated."""
+        zc = _make_zotero_client()
+        zc._find_pdf_attachment_key = AsyncMock(return_value="PDFKEY01")
+        zc._call = AsyncMock(
+            return_value={
+                "content": "Truncated text.",
+                "indexedChars": 15,
+                "totalChars": 100,
+            }
+        )
+
+        result = await zc.get_fulltext("ITEM0001")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_fulltext_returns_text_when_not_truncated(self) -> None:
+        """get_fulltext returns indexed text when not truncated."""
+        zc = _make_zotero_client()
+        zc._find_pdf_attachment_key = AsyncMock(return_value="PDFKEY01")
+        zc._call = AsyncMock(
+            return_value={
+                "content": "Complete text.",
+                "indexedChars": 14,
+                "totalChars": 14,
+            }
+        )
+
+        result = await zc.get_fulltext("ITEM0001")
+
+        assert result == "Complete text."
