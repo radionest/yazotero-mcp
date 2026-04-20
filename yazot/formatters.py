@@ -13,6 +13,8 @@ from bs4 import BeautifulSoup, Tag
 logger = logging.getLogger(__name__)
 
 REPLACEMENT_CHAR = "\ufffd"
+_replacement_char_notes_logged = 0
+_REPLACEMENT_LOG_LIMIT = 10
 
 type NoteData = dict[str, str | int | float | Sequence[str | int | float | NoteData] | NoteData]
 
@@ -28,10 +30,19 @@ def extract_note_text(html_content: str) -> str:
     result = result.strip()
     result = unicodedata.normalize("NFC", result)
     if REPLACEMENT_CHAR in result:
-        logger.warning(
-            "Note contains U+FFFD replacement characters — "
-            "likely encoding issue in Zotero API response"
-        )
+        global _replacement_char_notes_logged
+        _replacement_char_notes_logged += 1
+        if _replacement_char_notes_logged <= _REPLACEMENT_LOG_LIMIT:
+            logger.warning(
+                "Note contains %d U+FFFD replacement characters — "
+                "likely encoding issue in Zotero API response",
+                result.count(REPLACEMENT_CHAR),
+            )
+            if _replacement_char_notes_logged == _REPLACEMENT_LOG_LIMIT:
+                logger.warning(
+                    "Further U+FFFD warnings suppressed (limit %d reached)",
+                    _REPLACEMENT_LOG_LIMIT,
+                )
         result = result.replace(REPLACEMENT_CHAR, "")
     return result
 
