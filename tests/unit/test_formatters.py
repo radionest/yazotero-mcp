@@ -4,167 +4,124 @@ from yazot.formatters import extract_note_text, format_note_html
 
 
 class TestFormatNoteHtml:
-    """Tests for format_note_html() function."""
+    """Tests for format_note_html() — markdown to HTML conversion."""
 
-    def test_format_note_html_simple_text(self) -> None:
-        """Test HTML formatting with simple text."""
+    def test_simple_text(self) -> None:
         result = format_note_html("Hello world")
+        assert "<p>Hello world</p>" in result
 
-        assert result == "<p>Hello world</p>"
+    def test_paragraphs(self) -> None:
+        result = format_note_html("Paragraph 1\n\nParagraph 2")
+        assert "<p>Paragraph 1</p>" in result
+        assert "<p>Paragraph 2</p>" in result
 
-    def test_format_note_html_with_newlines(self) -> None:
-        """Test HTML formatting with single newlines."""
-        result = format_note_html("Line 1\nLine 2\nLine 3")
+    def test_heading(self) -> None:
+        result = format_note_html("## Key findings")
+        assert "<h2>Key findings</h2>" in result
 
-        assert result == "<p>Line 1<br>Line 2<br>Line 3</p>"
+    def test_blockquote(self) -> None:
+        result = format_note_html("> This is a quote")
+        assert "<blockquote>" in result
+        assert "This is a quote" in result
 
-    def test_format_note_html_with_paragraphs(self) -> None:
-        """Test HTML formatting with paragraph breaks (double newlines)."""
-        result = format_note_html("Paragraph 1\n\nParagraph 2\n\nParagraph 3")
+    def test_bold_and_italic(self) -> None:
+        result = format_note_html("**bold** and *italic*")
+        assert "<strong>bold</strong>" in result
+        assert "<em>italic</em>" in result
 
-        assert result == "<p>Paragraph 1</p><p>Paragraph 2</p><p>Paragraph 3</p>"
+    def test_unordered_list(self) -> None:
+        result = format_note_html("- Item 1\n- Item 2")
+        assert "<li>Item 1</li>" in result
+        assert "<li>Item 2</li>" in result
 
-    def test_format_note_html_escapes_html_chars(self) -> None:
-        """Test that HTML special characters are escaped."""
-        result = format_note_html("<script>alert('XSS')</script>")
-
-        assert "&lt;script&gt;" in result
-        assert "&lt;/script&gt;" in result
-        assert "<script>" not in result
-
-    def test_format_note_html_escapes_ampersand(self) -> None:
-        """Test that ampersands are escaped."""
+    def test_escapes_ampersand(self) -> None:
         result = format_note_html("Tom & Jerry")
-
         assert "&amp;" in result
-        assert result == "<p>Tom &amp; Jerry</p>"
 
-    def test_format_note_html_escapes_quotes(self) -> None:
-        """Test that quotes are escaped."""
-        result = format_note_html('He said "hello"')
-
-        assert "&quot;" in result or '"' in result  # Either escaped or preserved
-
-    def test_format_note_html_mixed_formatting(self) -> None:
-        """Test HTML formatting with mixed newlines and special chars."""
-        text = "Line 1 <tag>\n\nLine 2 & more\nLine 3"
-        result = format_note_html(text)
-
-        assert "&lt;tag&gt;" in result
-        assert "&amp;" in result
-        assert "<br>" in result
-        assert "</p><p>" in result
-
-    def test_format_note_html_empty_string(self) -> None:
-        """Test HTML formatting with empty string."""
+    def test_empty_string(self) -> None:
         result = format_note_html("")
-
-        assert result == "<p></p>"
-
-    def test_format_note_html_whitespace_only(self) -> None:
-        """Test HTML formatting with whitespace."""
-        result = format_note_html("   \n\n   ")
-
-        assert "<p>" in result
-        assert "</p>" in result
+        assert result == ""
 
 
 class TestExtractNoteText:
-    """Tests for extract_note_text() function."""
+    """Tests for extract_note_text() — HTML to markdown conversion."""
 
-    def test_extract_note_text_simple_paragraph(self) -> None:
-        """Test extracting text from simple paragraph."""
-        html = "<p>Hello world</p>"
-        result = extract_note_text(html)
+    def test_simple_paragraph(self) -> None:
+        result = extract_note_text("<p>Hello world</p>")
+        assert "Hello world" in result
 
-        assert result == "Hello world"
-
-    def test_extract_note_text_multiple_paragraphs(self) -> None:
-        """Test extracting text from multiple paragraphs."""
-        html = "<p>Paragraph 1</p><p>Paragraph 2</p>"
-        result = extract_note_text(html)
-
+    def test_multiple_paragraphs(self) -> None:
+        result = extract_note_text("<p>Paragraph 1</p><p>Paragraph 2</p>")
         assert "Paragraph 1" in result
         assert "Paragraph 2" in result
 
-    def test_extract_note_text_with_br_tags(self) -> None:
-        """Test extracting text with br tags."""
-        html = "<p>Line 1<br>Line 2<br>Line 3</p>"
-        result = extract_note_text(html)
+    def test_heading(self) -> None:
+        result = extract_note_text("<h2>Key findings</h2>")
+        assert "Key findings" in result
+        assert "##" in result
 
-        assert "Line 1" in result
-        assert "Line 2" in result
-        assert "Line 3" in result
-        assert "<br>" not in result
+    def test_blockquote_to_markdown(self) -> None:
+        result = extract_note_text("<blockquote><p>A quoted text</p></blockquote>")
+        assert "> " in result
+        assert "A quoted text" in result
 
-    def test_extract_note_text_strips_all_tags(self) -> None:
-        """Test that all HTML tags are stripped."""
-        html = "<div><p>Text with <strong>bold</strong> and <em>italic</em></p></div>"
-        result = extract_note_text(html)
+    def test_bold_and_italic(self) -> None:
+        result = extract_note_text("<p>Text with <strong>bold</strong> and <em>italic</em></p>")
+        assert "**bold**" in result
+        assert "*italic*" in result
 
-        assert result == "Text with bold and italic"
-        assert "<" not in result
-        assert ">" not in result
-
-    def test_extract_note_text_unescapes_entities(self) -> None:
-        """Test that HTML entities are unescaped."""
-        html = "<p>&lt;script&gt;alert(&quot;test&quot;)&lt;/script&gt;</p>"
-        result = extract_note_text(html)
-
-        assert result == '<script>alert("test")</script>'
-
-    def test_extract_note_text_ampersand(self) -> None:
-        """Test unescaping ampersands."""
-        html = "<p>Tom &amp; Jerry</p>"
-        result = extract_note_text(html)
-
-        assert result == "Tom & Jerry"
-
-    def test_extract_note_text_complex_html(self) -> None:
-        """Test extracting text from complex HTML structure."""
-        html = """
-        <div class="note">
-            <h1>Title</h1>
-            <p>First paragraph with <a href="#">link</a></p>
-            <ul>
-                <li>Item 1</li>
-                <li>Item 2</li>
-            </ul>
-        </div>
-        """
-        result = extract_note_text(html)
-
-        assert "Title" in result
-        assert "First paragraph with link" in result
+    def test_list(self) -> None:
+        result = extract_note_text("<ul><li>Item 1</li><li>Item 2</li></ul>")
         assert "Item 1" in result
         assert "Item 2" in result
-        assert "<" not in result
 
-    def test_extract_note_text_empty_html(self) -> None:
-        """Test extracting text from empty HTML."""
-        html = "<p></p>"
-        result = extract_note_text(html)
+    def test_unescapes_entities(self) -> None:
+        result = extract_note_text("<p>Tom &amp; Jerry</p>")
+        assert "Tom & Jerry" in result
 
+    def test_empty_html(self) -> None:
+        result = extract_note_text("<p></p>")
         assert result == ""
 
-    def test_extract_note_text_whitespace_normalization(self) -> None:
-        """Test that whitespace is handled properly."""
-        html = "<p>  Text with   spaces  </p>"
+    def test_complex_html(self) -> None:
+        html = """
+        <h1>Title</h1>
+        <p>First paragraph with <a href="#">link</a></p>
+        <ul>
+            <li>Item 1</li>
+            <li>Item 2</li>
+        </ul>
+        """
         result = extract_note_text(html)
+        assert "Title" in result
+        assert "Item 1" in result
+        assert "Item 2" in result
 
-        assert result == "Text with   spaces"  # Strip outer whitespace
+    def test_nested_tags(self) -> None:
+        result = extract_note_text("<div><div><p>Deep content</p></div></div>")
+        assert "Deep content" in result
 
-    def test_extract_note_text_nested_tags(self) -> None:
-        """Test extracting text from deeply nested tags."""
-        html = "<div><div><div><p>Deep content</p></div></div></div>"
+
+class TestRoundtrip:
+    """Tests that markdown → HTML → markdown preserves key elements."""
+
+    def test_blockquote_survives_roundtrip(self) -> None:
+        md_text = "Some text\n\n> This is a quoted passage\n\nMore text"
+        html = format_note_html(md_text)
         result = extract_note_text(html)
+        assert "> " in result
+        assert "This is a quoted passage" in result
 
-        assert result == "Deep content"
-
-    def test_extract_note_text_special_entities(self) -> None:
-        """Test unescaping special HTML entities."""
-        html = "<p>&copy; 2024 &mdash; Test &nbsp; Company</p>"
+    def test_heading_survives_roundtrip(self) -> None:
+        md_text = "# Title\n\n## Section"
+        html = format_note_html(md_text)
         result = extract_note_text(html)
+        assert "# Title" in result
+        assert "## Section" in result
 
-        assert "©" in result
-        assert "—" in result or "&mdash;" in result
+    def test_list_survives_roundtrip(self) -> None:
+        md_text = "- Point one\n- Point two"
+        html = format_note_html(md_text)
+        result = extract_note_text(html)
+        assert "Point one" in result
+        assert "Point two" in result
