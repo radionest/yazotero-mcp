@@ -25,18 +25,19 @@ class NoteManager:
         """
         self.client = client
 
-    async def create_note(
-        self, item_key: str, content: str | dict[str, Any], tags: list[str] | None = None
-    ) -> Note:
-        """Create a new note for an item."""
-        # Convert dict to string if needed
+    @staticmethod
+    def _content_to_html(content: str | dict[str, Any]) -> tuple[str, str]:
+        """Convert content to HTML for Zotero storage.
+
+        Returns (content_str, note_html) where content_str is the plain text
+        representation and note_html is the HTML for Zotero.
+        """
         is_html = False
         match content:
             case dict():
                 content_str = format_dict_to_html(content)
                 is_html = True
             case str():
-                # Try to parse as JSON and convert to dict
                 try:
                     content_dict = json.loads(content)
                     content_str = format_dict_to_html(content_dict)
@@ -47,6 +48,13 @@ class NoteManager:
                 content_str = str(content)
 
         note_html = content_str if is_html else format_note_html(content_str)
+        return content_str, note_html
+
+    async def create_note(
+        self, item_key: str, content: str | dict[str, Any], tags: list[str] | None = None
+    ) -> Note:
+        """Create a new note for an item."""
+        content_str, note_html = self._content_to_html(content)
         note_item = ItemCreate(
             item_type="note",
             parent_item=item_key,
@@ -73,22 +81,7 @@ class NoteManager:
 
     async def update_note(self, note_key: str, content: str | dict[str, Any]) -> Note:
         """Update an existing note's content in-place."""
-        is_html = False
-        match content:
-            case dict():
-                content_str = format_dict_to_html(content)
-                is_html = True
-            case str():
-                try:
-                    content_dict = json.loads(content)
-                    content_str = format_dict_to_html(content_dict)
-                    is_html = True
-                except (json.JSONDecodeError, ValueError):
-                    content_str = content
-            case _:
-                content_str = str(content)
-
-        note_html = content_str if is_html else format_note_html(content_str)
+        _, note_html = self._content_to_html(content)
         await self.client.update_item(note_key, ItemUpdate(note=note_html))
         return await self.get_note(note_key)
 
