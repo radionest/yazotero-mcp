@@ -15,9 +15,10 @@ INPUT=$(cat)
 # Extract subagent_type
 SUBAGENT=$(echo "$INPUT" | sed -n 's/.*"subagent_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 
-# Block development agents on main (Explore is read-only — allowed)
+# Block development agents on main
+# Allowed on main (read-only): Explore, feature-dev:code-explorer, feature-dev:code-reviewer, pr-diff-reviewer
 case "$SUBAGENT" in
-  Plan|python-developer|feature-dev:*)
+  Plan|python-developer|feature-dev|feature-dev:code-architect)
     cat >&2 <<'EOF'
 BLOCKED: Аналитический/архитектурный агент на ветке main.
 Войди в worktree через EnterWorktree перед запуском анализа или разработки.
