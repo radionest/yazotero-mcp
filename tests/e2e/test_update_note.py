@@ -65,9 +65,7 @@ class TestUpdateNoteEndpoint:
         assert note.parent_key == created_note["item_key"]
 
     @pytest.mark.asyncio
-    async def test_update_note_preserves_tags(
-        self, created_note: dict, test_zotero_client: ZoteroClient
-    ) -> None:
+    async def test_update_note_preserves_tags(self, created_note: dict) -> None:
         # First add tags via update_item_tags
         async with Client(mcp) as client:
             await client.call_tool(
@@ -104,5 +102,5 @@ class TestUpdateNoteEndpoint:
             )
             note = result.data
 
-        assert "summary" in note.content
+        assert "Summary" in note.content
         assert "Updated analysis" in note.content
