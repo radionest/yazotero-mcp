@@ -258,6 +258,32 @@ class TestFulltextResolver:
 
         assert source == "working"
 
+    async def test_cascade_generic_exception_continues(self) -> None:
+        """Generic exceptions from plugins don't break the cascade."""
+        s1 = make_mock_source("buggy_plugin")
+        s1.find_pdf_url = AsyncMock(side_effect=ValueError("plugin bug"))
+        s2 = make_mock_source("working", return_url="https://example.com/pdf.pdf")
+        resolver = FulltextResolver([s1, s2])
+
+        url, source = await resolver.resolve("10.1234/test", None)
+
+        assert source == "working"
+        assert url == "https://example.com/pdf.pdf"
+
+    async def test_resolve_empty_string_doi_normalized(self) -> None:
+        """Empty/whitespace DOI and title are normalized to None → raises."""
+        resolver = FulltextResolver([make_mock_source()])
+
+        with pytest.raises(FulltextNotFoundError):
+            await resolver.resolve("", "")
+
+    async def test_resolve_whitespace_only_normalized(self) -> None:
+        """Whitespace-only strings are normalized to None → raises."""
+        resolver = FulltextResolver([make_mock_source()])
+
+        with pytest.raises(FulltextNotFoundError):
+            await resolver.resolve("  ", "  \n ")
+
     async def test_cascade_title_only(self) -> None:
         s1 = make_mock_source("source", return_url="https://example.com/pdf.pdf")
         resolver = FulltextResolver([s1])
