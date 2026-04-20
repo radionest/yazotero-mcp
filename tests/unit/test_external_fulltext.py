@@ -1,10 +1,11 @@
 """E2E tests for fetch_external_fulltext MCP tool.
 
 Tests the full MCP tool flow via Client(mcp), mocking external HTTP calls
-(Unpaywall/CORE/Libgen) while using real MCP lifespan and TextChunker.
+(Unpaywall/CORE) while using real MCP lifespan and TextChunker.
 """
 
 import io
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -13,6 +14,13 @@ from fastmcp.exceptions import ToolError
 from pypdf import PdfWriter
 
 from yazot.mcp_server import mcp
+
+
+@pytest.fixture(autouse=True)
+def _disable_plugins() -> Iterator[None]:
+    """Prevent installed entry_point plugins from affecting tests."""
+    with patch("yazot.mcp_server.discover_sources", return_value=[]):
+        yield
 
 
 def _make_pdf_bytes(pages: int = 1, text: str = "Sample text") -> bytes:
@@ -255,10 +263,13 @@ class TestFetchExternalFulltextNotConfigured:
 
     @pytest.fixture(autouse=True)
     def _clear_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Ensure no external fulltext config is set."""
-        monkeypatch.delenv("UNPAYWALL_EMAIL", raising=False)
-        monkeypatch.delenv("CORE_API_KEY", raising=False)
-        monkeypatch.delenv("FULLTEXT_LIBGEN_ENABLED", raising=False)
+        """Ensure no external fulltext config is set.
+
+        Must setenv to empty string (not delenv) because pydantic-settings
+        falls back to .env file values when env var is missing.
+        """
+        monkeypatch.setenv("UNPAYWALL_EMAIL", "")
+        monkeypatch.setenv("CORE_API_KEY", "")
 
     @pytest.mark.asyncio
     async def test_not_configured_raises_error(self) -> None:
