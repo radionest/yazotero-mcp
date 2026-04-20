@@ -373,10 +373,24 @@ class ZoteroClient(ZoteroClientProtocol):
 
             fulltext_data = await self._call(self._client.fulltext_item, pdf_key)
             content = fulltext_data.get("content")
+            indexed_chars = fulltext_data.get("indexedChars")
+            total_chars = fulltext_data.get("totalChars")
+            is_truncated = (
+                indexed_chars is not None
+                and total_chars is not None
+                and indexed_chars < total_chars
+            )
 
-            if content:
+            if content and not is_truncated:
                 self._cache[cache_key] = content
                 return str(content)
+            if content and is_truncated:
+                logger.info(
+                    "Indexed fulltext truncated for %s (%d/%d chars), skipping",
+                    item_key,
+                    indexed_chars,
+                    total_chars,
+                )
 
         except (zotero_errors.ResourceNotFoundError, KeyError, ValueError):
             # No fulltext available for this item — safe to cache
@@ -455,9 +469,23 @@ class ZoteroClient(ZoteroClientProtocol):
         try:
             fulltext_data = await _run_sync(self._client.fulltext_item, pdf_key)
             content = fulltext_data.get("content")
-            if content:
+            indexed_chars = fulltext_data.get("indexedChars")
+            total_chars = fulltext_data.get("totalChars")
+            is_truncated = (
+                indexed_chars is not None
+                and total_chars is not None
+                and indexed_chars < total_chars
+            )
+            if content and not is_truncated:
                 self._cache[cache_key] = str(content)
                 return str(content)
+            if content and is_truncated:
+                logger.info(
+                    "Indexed fulltext truncated for %s (%d/%d chars), falling back to PDF",
+                    item_key,
+                    indexed_chars,
+                    total_chars,
+                )
         except (zotero_errors.ResourceNotFoundError, KeyError, ValueError):
             pass
         except Exception:
