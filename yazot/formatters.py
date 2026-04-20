@@ -50,7 +50,7 @@ def parse_datetime(date_str: str) -> datetime:
 
 
 def format_dict_to_html(data: NoteData, level: int = 1) -> str:
-    """Convert dictionary to HTML with keys as headers.
+    """Convert dictionary to HTML with keys as headers (capitalized).
 
     Args:
         data: Dictionary to convert
