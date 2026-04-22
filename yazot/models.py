@@ -255,7 +255,7 @@ class FulltextResponse(ChunkInfoMixin):
     """Response for fulltext content with chunking support."""
 
     item_key: str
-    content: str
+    content: str | None = None
     message: str | None = None
     error: str | None = None
 
@@ -264,7 +264,7 @@ class ExternalFulltextResponse(ChunkInfoMixin):
     """Response for externally fetched fulltext content."""
 
     item_key: str | None = None
-    content: str
+    content: str | None = None
     source: str | None = None
     pdf_attached: bool = False
     message: str | None = None

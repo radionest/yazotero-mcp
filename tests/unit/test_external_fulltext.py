@@ -202,7 +202,7 @@ class TestFetchExternalFulltext:
                 )
                 response = result.data
 
-        assert response.content == ""
+        assert response.content is None
         assert response.error is not None
         assert "no text" in response.error.lower()
 
