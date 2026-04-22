@@ -55,6 +55,15 @@ class TestExtractQuotes:
         text = "  > Indented quote"
         assert extract_quotes(text) == ["Indented quote"]
 
+    def test_adjacent_blockquotes_after_roundtrip(self) -> None:
+        """Empty > line (from HTML roundtrip) separates quotes."""
+        text = "Intro\n> Quote one\n>\n> Quote two\nEnd"
+        assert extract_quotes(text) == ["Quote one", "Quote two"]
+
+    def test_multiline_quotes_separated_by_empty_blockquote(self) -> None:
+        text = "> Line one\n> Line two\n>\n> Line three\n> Line four"
+        assert extract_quotes(text) == ["Line one Line two", "Line three Line four"]
+
 
 class TestNormalizeText:
     """Unit tests for text normalization."""

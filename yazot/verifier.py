@@ -23,7 +23,11 @@ def extract_quotes(text: str) -> list[str]:
         if stripped.startswith(">"):
             # Remove one or more '>' prefixes and optional space
             content = re.sub(r"^>+\s?", "", stripped)
-            current_quote_lines.append(content)
+            if content.strip():
+                current_quote_lines.append(content)
+            elif current_quote_lines:
+                quotes.append(" ".join(current_quote_lines))
+                current_quote_lines = []
         else:
             if current_quote_lines:
                 quotes.append(" ".join(current_quote_lines))
