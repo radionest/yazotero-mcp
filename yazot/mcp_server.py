@@ -577,7 +577,6 @@ async def get_item_fulltext(item_key: str, ctx: Context) -> FulltextResponse:
     if not fulltext:
         return FulltextResponse(
             item_key=item_key,
-            content="",
             error="No fulltext available for this item",
         ).to_slim_dict()  # type: ignore[return-value]
 
@@ -746,7 +745,6 @@ async def fetch_external_fulltext(
     if not text.strip():
         return ExternalFulltextResponse(
             item_key=item_key,
-            content="",
             source=source,
             error="PDF downloaded but no text could be extracted",
         ).to_slim_dict()  # type: ignore[return-value]
