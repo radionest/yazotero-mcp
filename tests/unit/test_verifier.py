@@ -86,6 +86,36 @@ class TestNormalizeText:
     def test_empty(self) -> None:
         assert normalize_text("") == ""
 
+    def test_en_dash_normalized(self) -> None:
+        assert normalize_text("blood\u2013pressure") == "blood-pressure"
+
+    def test_em_dash_normalized(self) -> None:
+        assert normalize_text("she said\u2014nothing") == "she said-nothing"
+
+    def test_unicode_hyphen_normalized(self) -> None:
+        assert normalize_text("co\u2010operation") == "co-operation"
+
+    def test_non_breaking_hyphen_normalized(self) -> None:
+        assert normalize_text("non\u2011breaking") == "non-breaking"
+
+    def test_horizontal_bar_normalized(self) -> None:
+        assert normalize_text("a\u2015b") == "a-b"
+
+    def test_minus_sign_normalized(self) -> None:
+        assert normalize_text("p\u2212value") == "p-value"
+
+    def test_ascii_hyphen_preserved(self) -> None:
+        assert normalize_text("blood-pressure") == "blood-pressure"
+
+    def test_nfc_precomposed_vs_decomposed(self) -> None:
+        decomposed = "caf\u0065\u0301"
+        precomposed = "caf\u00e9"
+        assert normalize_text(decomposed) == normalize_text(precomposed)
+
+    def test_idempotent(self) -> None:
+        text = "Blood\u2013pressure  Test"
+        assert normalize_text(normalize_text(text)) == normalize_text(text)
+
 
 class TestNoteVerifier:
     """Integration tests for NoteVerifier with mocked dependencies."""
@@ -226,6 +256,25 @@ class TestNoteVerifier:
         result = await verifier.verify("NOTE0001")
 
         assert result.verified is True
+
+    @pytest.mark.asyncio
+    async def test_unicode_dash_in_quote_matches_ascii_in_fulltext(
+        self,
+        verifier: NoteVerifier,
+        mock_note_manager: AsyncMock,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Quote with en-dash from PDF copy matches ASCII hyphen in indexed text."""
+        note = self._make_note("Notes\n> blood\u2013pressure measurement\nEnd")
+        mock_note_manager.get_note.return_value = note
+        mock_client.get_fulltext.return_value = (
+            "We performed blood-pressure measurement on subjects."
+        )
+
+        result = await verifier.verify("NOTE0001")
+
+        assert result.verified is True
+        assert result.verified_quotes == 1
 
     @pytest.mark.asyncio
     async def test_partial_verification(

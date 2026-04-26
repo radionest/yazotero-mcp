@@ -1,6 +1,7 @@
 """Verification of quotes in notes against article fulltext."""
 
 import re
+import unicodedata
 from typing import TYPE_CHECKING
 
 from .models import ItemUpdate, VerificationResult, ZoteroTag
@@ -40,8 +41,13 @@ def extract_quotes(text: str) -> list[str]:
     return [q for q in quotes if q.strip()]
 
 
+_DASH_PATTERN = re.compile(r"[\u2010\u2011\u2013\u2014\u2015\u2212]")
+
+
 def normalize_text(text: str) -> str:
-    """Normalize text for comparison: lowercase, collapse whitespace."""
+    """Normalize text for comparison: NFC, dashes, whitespace, lowercase."""
+    text = unicodedata.normalize("NFC", text)
+    text = _DASH_PATTERN.sub("-", text)
     text = text.lower()
     text = re.sub(r"\s+", " ", text)
     text = text.strip()
