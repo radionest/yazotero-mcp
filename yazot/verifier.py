@@ -1,5 +1,6 @@
 """Verification of quotes in notes against article fulltext."""
 
+import html
 import re
 import unicodedata
 from typing import TYPE_CHECKING
@@ -45,7 +46,8 @@ _DASH_PATTERN = re.compile(r"[\u2010\u2011\u2013\u2014\u2015\u2212]")
 
 
 def normalize_text(text: str) -> str:
-    """Normalize text for comparison: NFC, dashes, whitespace, lowercase."""
+    """Normalize text for comparison: HTML entities, NFC, dashes, whitespace, lowercase."""
+    text = html.unescape(text)
     text = unicodedata.normalize("NFC", text)
     text = _DASH_PATTERN.sub("-", text)
     text = text.lower()
