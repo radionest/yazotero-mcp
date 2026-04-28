@@ -116,6 +116,27 @@ class TestNormalizeText:
         text = "Blood\u2013pressure  Test"
         assert normalize_text(normalize_text(text)) == normalize_text(text)
 
+    def test_html_entity_nbsp(self) -> None:
+        assert normalize_text("foo&nbsp;bar") == "foo bar"
+
+    def test_html_entity_quot(self) -> None:
+        assert normalize_text("she said &quot;hi&quot;") == 'she said "hi"'
+
+    def test_html_entity_amp(self) -> None:
+        assert normalize_text("Smith &amp; Jones") == "smith & jones"
+
+    def test_html_entity_lt_gt(self) -> None:
+        assert normalize_text("a&lt;b&gt;c") == "a<b>c"
+
+    def test_html_numeric_entity_decoded(self) -> None:
+        assert normalize_text("co&#8208;operation") == "co-operation"
+
+    def test_html_hex_entity_decoded(self) -> None:
+        assert normalize_text("blood&#x2013;pressure") == "blood-pressure"
+
+    def test_malformed_entity_preserved(self) -> None:
+        assert normalize_text("a &xyz; b") == "a &xyz; b"
+
 
 class TestNoteVerifier:
     """Integration tests for NoteVerifier with mocked dependencies."""
@@ -269,6 +290,25 @@ class TestNoteVerifier:
         mock_note_manager.get_note.return_value = note
         mock_client.get_fulltext.return_value = (
             "We performed blood-pressure measurement on subjects."
+        )
+
+        result = await verifier.verify("NOTE0001")
+
+        assert result.verified is True
+        assert result.verified_quotes == 1
+
+    @pytest.mark.asyncio
+    async def test_html_entity_in_quote_matches_decoded_fulltext(
+        self,
+        verifier: NoteVerifier,
+        mock_note_manager: AsyncMock,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Quote with HTML entity from Zotero note matches decoded text in fulltext."""
+        note = self._make_note("Notes\n> Smith &amp; Jones reported a 30&nbsp;mg dose\nEnd")
+        mock_note_manager.get_note.return_value = note
+        mock_client.get_fulltext.return_value = (
+            "Smith & Jones reported a 30 mg dose in their study."
         )
 
         result = await verifier.verify("NOTE0001")
