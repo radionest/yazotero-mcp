@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, overload
 
 from pyzotero import zotero, zotero_errors
@@ -762,15 +763,41 @@ class ZoteroClient(ZoteroClientProtocol):
     async def attach_pdf(self, item_key: str, filepath: str) -> None:
         """Attach a PDF file to a Zotero item.
 
-        Uses pyzotero's attachment_simple which creates a new attachment
-        with the filename as title.
+        Builds an imported_file attachment payload with the file basename as
+        title/filename, then uploads via pyzotero's upload_attachments with
+        basedir set to the file's parent directory. Raises ZoteroError when
+        the upload reports failures (pyzotero returns HTTP 200 even when
+        Zotero rejects individual attachments).
 
         Args:
             item_key: Parent item key to attach the PDF to
             filepath: Path to the PDF file on disk
         """
+        path = Path(filepath)
         try:
-            await _run_sync(self._client.attachment_simple, [filepath], item_key)
+            payload = await self._call(
+                self._client.item_template, "attachment", linkmode="imported_file"
+            )
+            payload["title"] = path.name
+            payload["filename"] = path.name
+            result = await self._call(
+                self._client.upload_attachments,
+                [payload],
+                item_key,
+                basedir=str(path.parent),
+            )
+            failures = result.get("failure", []) if isinstance(result, dict) else []
+            if failures:
+                failed_names = [
+                    str(f.get("title") or f.get("filename") or "unknown") for f in failures
+                ]
+                raise ZoteroError(
+                    f"Failed to attach PDF to item '{item_key}': Zotero rejected "
+                    f"{len(failures)} attachment(s): {', '.join(failed_names)}. "
+                    "Hint: verify the file is a valid PDF and the path is readable."
+                )
+        except ZoteroError:
+            raise
         except zotero_errors.ResourceNotFoundError as e:
             raise ZoteroNotFoundError("item", item_key) from e
         except zotero_errors.UserNotAuthorisedError as e:
