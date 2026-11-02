@@ -479,17 +479,19 @@ async def collection_with_empty_subcollections(
 @pytest.fixture
 async def large_nested_collection(
     test_data_manager: "ZoteroTestDataManager",
-) -> AsyncGenerator[tuple[str, int], None]:
-    """Create parent collection with multiple subcollections for chunking tests."""
+) -> AsyncGenerator[tuple[str, int, dict[str, set[str]]], None]:
+    """Create nested collections and retain expected item keys for diagnostics."""
     parent_keys = await test_data_manager.create_test_collections(1, name_prefix="Large Nested")
     parent_key = parent_keys[0]
-    await test_data_manager.create_test_items(10, parent_key)
+    parent_items = await test_data_manager.create_test_items(10, parent_key)
+    expected_by_collection = {parent_key: {item.key for item in parent_items}}
 
     sub_keys = await test_data_manager.create_test_collections(
         5, parent_key=parent_key, name_prefix="Large Sub"
     )
     for sub_key in sub_keys:
-        await test_data_manager.create_test_items(8, sub_key)
+        sub_items = await test_data_manager.create_test_items(8, sub_key)
+        expected_by_collection[sub_key] = {item.key for item in sub_items}
 
     total_count = 10 + 5 * 8
-    yield parent_key, total_count
+    yield parent_key, total_count, expected_by_collection
