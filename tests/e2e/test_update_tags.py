@@ -103,9 +103,10 @@ class TestUpdateItemTagsAdd:
         assert data["changed"] is True
 
         # Verify existing auto-tags preserved their type via raw API
+        # Zotero omits `type` for automatic tags (server default = 0); only manual tags carry explicit type=1
         raw = await test_zotero_client.get_raw_item(auto_item.key)
         raw_tags = raw["data"]["tags"]
-        auto_tags = [t for t in raw_tags if t["type"] == 0]
+        auto_tags = [t for t in raw_tags if t.get("type", 0) == 0]
         assert len(auto_tags) > 0, "Auto-tags should be preserved with type=0"
 
         # Verify newly added tag has type=1

@@ -8,6 +8,18 @@ from dotenv import load_dotenv
 
 from yazot.mcp_server import mcp
 
+# Load .env.test at import time, not only in load_test_env below: the e2e
+# suite applies its skip marker at collection time (pytest_collection_modifyitems
+# in tests/e2e/conftest.py reads TEST_ZOTERO_API_KEY), and session fixtures run
+# only after collection. This conftest is imported during collection, so loading
+# here makes the key visible to that check; the fixture keeps its reload
+# (idempotent with override=True) and the TEST_ZOTERO_* -> ZOTERO_* isolation.
+_env_test_path = os.path.join(os.path.dirname(__file__), "..", ".env.test")
+if os.path.exists(_env_test_path):
+    load_dotenv(_env_test_path, override=True)
+else:
+    load_dotenv(".env.test", override=True)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def load_test_env() -> None:

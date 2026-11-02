@@ -137,3 +137,77 @@ class TestFulltextTruncationDetection:
         result = await zc.get_fulltext("ITEM0001")
 
         assert result == "Complete text."
+
+
+class TestAttachPdf:
+    """Regression tests for absolute-path PDF upload.
+
+    pyzotero 1.11.0 attachment_simple() stores the full absolute path as the
+    attachment filename, which Zotero rejects (400: filename cannot contain a
+    directory path) while still returning HTTP 200 — so the failure was silent.
+    attach_pdf must build the payload with basename title/filename and raise
+    ZoteroError when upload_attachments reports failures.
+    """
+
+    @pytest.mark.asyncio
+    async def test_absolute_path_sends_basename_payload_and_parent_basedir(self) -> None:
+        """Absolute input path → basename in payload, parent dir as basedir."""
+        zc = _make_zotero_client()
+        template: dict[str, Any] = {"itemType": "attachment", "linkMode": "imported_file"}
+        upload_result = {"success": [{"key": "ATTACH1"}], "failure": [], "unchanged": []}
+        zc._call = AsyncMock(side_effect=[template, upload_result])
+
+        result = await zc.attach_pdf("ITEM0001", "/papers/dir/my paper.pdf")
+
+        assert result is None
+        assert zc._call.call_count == 2
+
+        template_call = zc._call.call_args_list[0]
+        assert template_call.args[0] == zc._client.item_template
+        assert template_call.args[1] == "attachment"
+        assert template_call.kwargs == {"linkmode": "imported_file"}
+
+        upload_call = zc._call.call_args_list[1]
+        assert upload_call.args[0] == zc._client.upload_attachments
+        (payload,) = upload_call.args[1]
+        assert payload is template  # payload is the template, mutated in place
+        assert payload["title"] == "my paper.pdf"
+        assert payload["filename"] == "my paper.pdf"
+        assert upload_call.args[2] == "ITEM0001"
+        assert upload_call.kwargs == {"basedir": "/papers/dir"}
+
+    @pytest.mark.asyncio
+    async def test_upload_failure_raises_zotero_error(self) -> None:
+        """Non-empty failure list from upload_attachments must raise ZoteroError."""
+        zc = _make_zotero_client()
+        template: dict[str, Any] = {"itemType": "attachment", "linkMode": "imported_file"}
+        failed_entry = {"title": "my paper.pdf", "filename": "my paper.pdf"}
+        upload_result = {"success": [], "failure": [failed_entry], "unchanged": []}
+        zc._call = AsyncMock(side_effect=[template, upload_result])
+
+        with pytest.raises(ZoteroError, match="Failed to attach PDF.*ITEM0001"):
+            await zc.attach_pdf("ITEM0001", "/papers/dir/my paper.pdf")
+
+    @pytest.mark.asyncio
+    async def test_upload_success_returns_none(self) -> None:
+        """Successful upload keeps attach_pdf returning None."""
+        zc = _make_zotero_client()
+        template: dict[str, Any] = {"itemType": "attachment", "linkMode": "imported_file"}
+        upload_result = {
+            "success": [{"key": "ATTACH1", "title": "my paper.pdf"}],
+            "failure": [],
+            "unchanged": [],
+        }
+        zc._call = AsyncMock(side_effect=[template, upload_result])
+
+        assert await zc.attach_pdf("ITEM0001", "/papers/dir/my paper.pdf") is None
+
+    @pytest.mark.asyncio
+    async def test_upload_unchanged_returns_none(self) -> None:
+        """Already-present file (unchanged) is not an error."""
+        zc = _make_zotero_client()
+        template: dict[str, Any] = {"itemType": "attachment", "linkMode": "imported_file"}
+        upload_result = {"success": [], "failure": [], "unchanged": [{"key": "ATTACH1"}]}
+        zc._call = AsyncMock(side_effect=[template, upload_result])
+
+        assert await zc.attach_pdf("ITEM0001", "/papers/dir/my paper.pdf") is None
