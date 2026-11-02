@@ -1,16 +1,21 @@
-"""Unit tests for ZoteroTestDataManager batch cleanup (e2e test helper).
+"""Unit tests for ZoteroTestDataManager (e2e test helper).
 
 Regression coverage for sandbox accumulation: cleanup() must delete items and
 collections in batches of 50 via pyzotero's batch delete APIs, fetching a fresh
 library version before every batch.
+
+Issue #62 regression: create_test_items() must embed collection membership in
+the initial ItemCreate payload instead of adding items to the collection
+after creation (post-creation add_to_collection could silently lose
+membership for some items).
 """
 
 import itertools
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 from tests.e2e.test_helpers import ZoteroTestDataManager
-from yazot.models import ZoteroItem, ZoteroItemData
+from yazot.models import ItemCreate, ZoteroItem, ZoteroItemData
 
 
 def _make_item(index: int) -> ZoteroItem:
@@ -129,3 +134,74 @@ async def test_cleanup_continues_after_failed_batch() -> None:
     assert result == {"items": 70, "collections": 70}
     assert manager.created_items == []
     assert manager.created_collections == []
+
+
+def _make_creation_client() -> MagicMock:
+    """Mock ZoteroClient for item-creation flows.
+
+    get_item_template returns a minimal journalArticle template; create_items
+    and add_to_collection are AsyncMocks so tests can assert call behavior.
+    """
+    client = MagicMock()
+    client.mode = "web"
+    client.get_item_template = AsyncMock(
+        return_value={
+            "itemType": "journalArticle",
+            "title": "",
+            "abstractNote": "",
+            "date": "",
+            "creators": [],
+            "tags": [],
+            "collections": [],
+        }
+    )
+    client.create_items = AsyncMock()
+    client.add_to_collection = AsyncMock()
+    return client
+
+
+def _created_batch(client: MagicMock) -> list[ItemCreate]:
+    """Extract the single batch of ItemCreate models passed to client.create_items."""
+    client.create_items.assert_awaited_once()
+    (batch,) = client.create_items.call_args.args
+    return cast("list[ItemCreate]", batch)
+
+
+async def test_create_test_items_embeds_collection_in_initial_payload() -> None:
+    """Issue #62 regression: with collection_key, membership must be set at creation.
+
+    The create payload must carry collections=[collection_key] and
+    add_to_collection must not be called afterwards (it could silently lose
+    membership for some items).
+    """
+    client = _make_creation_client()
+    created = [_make_item(i) for i in range(3)]
+    client.create_items = AsyncMock(return_value=created)
+
+    manager = ZoteroTestDataManager(client)
+    items = await manager.create_test_items(3, collection_key="COLLKEY")
+
+    assert items == created
+    assert manager.created_items == created
+    batch = _created_batch(client)
+    assert len(batch) == 3
+    assert all(isinstance(model, ItemCreate) for model in batch)
+    assert all(model.collections == ["COLLKEY"] for model in batch)
+    client.add_to_collection.assert_not_awaited()
+
+
+async def test_create_test_items_without_collection_keeps_empty_collections() -> None:
+    """Without collection_key, items are created with empty collections and no add call."""
+    client = _make_creation_client()
+    created = [_make_item(i) for i in range(2)]
+    client.create_items = AsyncMock(return_value=created)
+
+    manager = ZoteroTestDataManager(client)
+    items = await manager.create_test_items(2)
+
+    assert items == created
+    assert manager.created_items == created
+    batch = _created_batch(client)
+    assert len(batch) == 2
+    assert all(model.collections == [] for model in batch)
+    client.add_to_collection.assert_not_awaited()

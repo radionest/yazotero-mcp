@@ -161,19 +161,18 @@ class ZoteroTestDataManager:
         Returns:
             List of created item keys
         """
-        # Generate item data
+        # Generate item data. Embed collection membership in the create
+        # payload so items are born into the collection — Issue #62: the
+        # previous post-creation add_to_collection step could silently lose
+        # membership for some items.
+        collection_override = {"collections": [collection_key]} if collection_key else {}
         items_data = [
-            await self.generate_item_data(template_type, f"Test Item {i}") for i in range(count)
+            await self.generate_item_data(template_type, f"Test Item {i}", **collection_override)
+            for i in range(count)
         ]
 
         # Create items
-        items = await self.batch_create_items(items_data)
-
-        # Add to collection if specified
-        if collection_key and items:
-            await self.client.add_to_collection(collection_key, items)
-
-        return items
+        return await self.batch_create_items(items_data)
 
     async def create_item_with_attachment(
         self,
