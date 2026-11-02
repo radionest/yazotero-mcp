@@ -7,6 +7,9 @@ from typing import Any
 from yazot.models import ZoteroItem
 from yazot.zotero_client import ZoteroClient
 
+# Zotero API allows at most 50 objects per batch delete request
+_BATCH_DELETE_SIZE = 50
+
 
 class ZoteroTestDataManager:
     """Manages creation and cleanup of test data in Zotero library."""
@@ -340,28 +343,43 @@ class ZoteroTestDataManager:
 
         Only works in web mode. Returns counts of deleted items.
 
+        Deletes in batches of 50 (Zotero API limit per request) and fetches a
+        fresh library version before each batch, since every successful delete
+        advances the library version and the next batch needs the new one.
+
         Returns:
-            Dictionary with counts of deleted items and collections
+            Dictionary with counts of successfully deleted items and collections
         """
         deleted = {"items": 0, "collections": 0}
 
         if not self.can_cleanup:
             return deleted
 
-        # Delete items (must be done before collections if items are in them)
-        for item in self.created_items:
+        # Delete items in batches (must be done before collections if items are in them)
+        for i in range(0, len(self.created_items), _BATCH_DELETE_SIZE):
+            batch = self.created_items[i : i + _BATCH_DELETE_SIZE]
+            payload = [{"key": item.key} for item in batch]
             try:
-                await self.client.delete_item_by_key(item.key)
-                deleted["items"] += 1
+                version = await self.client._call(self.client._client.last_modified_version)
+                await self.client._call(
+                    self.client._client.delete_item, payload, last_modified=version
+                )
+                deleted["items"] += len(batch)
             except Exception:
-                # Item may already be deleted or not exist
+                # Batch may be partially deleted or keys may already be gone
                 pass
 
-        # Delete collections (in reverse order to handle nested structures)
-        for collection_key in reversed(self.created_collections):
+        # Delete collections in reverse order to handle nested structures
+        reversed_collections = list(reversed(self.created_collections))
+        for i in range(0, len(reversed_collections), _BATCH_DELETE_SIZE):
+            batch = reversed_collections[i : i + _BATCH_DELETE_SIZE]
+            payload = [{"key": key} for key in batch]
             try:
-                await self.client.delete_collection_by_key(collection_key)
-                deleted["collections"] += 1
+                version = await self.client._call(self.client._client.last_modified_version)
+                await self.client._call(
+                    self.client._client.delete_collection, payload, last_modified=version
+                )
+                deleted["collections"] += len(batch)
             except Exception:
                 pass
 
